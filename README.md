@@ -66,9 +66,17 @@ PROFILE=default \
 | `PROFILE` | 空 | 透传给 `codex exec --profile` |
 | `USE_FULL_AUTO` | `1` | 默认启用 `--full-auto` |
 | `DANGEROUSLY_BYPASS` | `0` | 为 `1` 时使用危险绕过模式，不建议日常开启 |
-| `SKIP_GIT_REPO_CHECK` | `0` | 为 `1` 时跳过 git 仓库检查 |
+| `SKIP_GIT_REPO_CHECK` | `0` | 为 `1` 时在首轮和后续 `resume` 轮次都跳过 git 仓库检查 |
 | `START_WITH_RESUME_IF_POSSIBLE` | `1` | 若存在历史状态则优先从上次会话恢复 |
 | `CONFIRM_TEXT` | `CONFIRMED: all tasks completed` | 完成协议中的第二行确认文本 |
+
+如果 `WORKDIR` 是未信任目录，可以显式开启：
+
+```bash
+SKIP_GIT_REPO_CHECK=1 ./codex-keep-running.sh ./prompt.md
+```
+
+这样首轮和后续续跑都会带上跳过检查参数，避免首轮能启动、续跑却因为 git 信任校验而持续失败。
 
 ## 使用示例
 
@@ -221,3 +229,8 @@ WORKDIR=/path/to/repo STATE_DIR=.codex-run ./codex-keep-running.sh ./prompt.md
 ```
 
 这会让 Codex 在指定仓库里执行任务，并把所有续跑状态保存在 `.codex-run` 中，后续即使守护脚本中断，也更容易从同一会话继续跑下去。
+
+
+## 社区支持
+
+- [Linux Do](https://linux.do/)

@@ -240,6 +240,11 @@ run_resume_exec() {
     cmd+=("--full-auto")
   fi
 
+  # 未信任仓库如果只在首跑跳过 git 检查、续跑却不跳过，会导致守护脚本反复重试但业务任务始终推进不了。
+  if [[ "$SKIP_GIT_REPO_CHECK" == "1" ]]; then
+    cmd+=("--skip-git-repo-check")
+  fi
+
   if [[ -n "$MODEL" ]]; then
     cmd+=("-m" "$MODEL")
   fi
