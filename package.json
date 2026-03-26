@@ -1,0 +1,56 @@
+{
+  "name": "codex-autoresearch",
+  "version": "0.1.0",
+  "description": "Unified Codex long-task runner with CLI, skills, and MCP entrypoints.",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/congwa/codex-autoresearch.git"
+  },
+  "homepage": "https://github.com/congwa/codex-autoresearch#readme",
+  "bugs": {
+    "url": "https://github.com/congwa/codex-autoresearch/issues"
+  },
+  "bin": {
+    "codex-autoresearch": "./dist/src/cli.js"
+  },
+  "exports": {
+    ".": "./dist/src/index.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "plugins",
+    ".agents",
+    "skills",
+    "README.md",
+    "codex-keep-running.sh"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "prepare": "npm run build"
+  },
+  "keywords": [
+    "codex",
+    "cli",
+    "mcp",
+    "automation",
+    "research"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.17.4",
+    "commander": "^14.0.1",
+    "yaml": "^2.8.1",
+    "zod": "^4.1.11"
+  },
+  "devDependencies": {
+    "@types/node": "^24.6.0",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.4"
+  }
+}

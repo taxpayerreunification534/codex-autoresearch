@@ -1,0 +1,41 @@
+{
+  "name": "codex-autoresearch",
+  "version": "0.1.0",
+  "description": "Current-chat and current-directory entrypoint for codex-autoresearch long tasks.",
+  "author": {
+    "name": "Congwa",
+    "email": "opensource@congwa.com",
+    "url": "https://github.com/congwa"
+  },
+  "homepage": "https://github.com/congwa/codex-autoresearch#readme",
+  "repository": "https://github.com/congwa/codex-autoresearch",
+  "license": "MIT",
+  "keywords": [
+    "codex",
+    "autoresearch",
+    "current-chat",
+    "current-directory"
+  ],
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "Codex Autoresearch",
+    "shortDescription": "Use autoresearch from the current chat via MCP and the current directory.",
+    "longDescription": "Start or resume codex-autoresearch tasks from the current Codex chat without manually thinking about shell commands, workdir, state-dir, or session ids. The plugin routes fixed chat phrases through MCP tools, defaults to the current directory, and decides whether to continue the latest current-directory task or start a new one.",
+    "developerName": "Congwa",
+    "category": "Productivity",
+    "capabilities": [
+      "Interactive",
+      "Write"
+    ],
+    "websiteURL": "https://github.com/congwa/codex-autoresearch",
+    "privacyPolicyURL": "https://github.com/congwa/codex-autoresearch",
+    "termsOfServiceURL": "https://github.com/congwa/codex-autoresearch",
+    "defaultPrompt": [
+      "用 autoresearch 继续做我们当前聊天里还没完成的事情。",
+      "用 autoresearch 在当前目录开一个新任务。",
+      "用 autoresearch 处理我们当前聊天里正在讨论的需求。"
+    ],
+    "brandColor": "#0F766E"
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "codex-autoresearch": {
+      "command": "node",
+      "args": [
+        "./dist/src/cli.js",
+        "mcp",
+        "serve"
+      ]
+    }
+  }
+}
