@@ -33,9 +33,9 @@ describe("plugin manifest", () => {
     expect(manifest.interface.displayName).toBe("Codex Autoresearch");
     expect(manifest.interface.capabilities).toEqual(["Interactive", "Write"]);
     expect(manifest.interface.defaultPrompt).toEqual([
-      "用 codex-autoresearch 继续做我们当前聊天里还没完成的事情。",
-      "用 codex-autoresearch 在当前目录开一个新任务。",
-      "用 codex-autoresearch 处理我们当前聊天里正在讨论的需求。"
+      "/codex-autoresearch",
+      "用 codex-autoresearch 把我们刚才聊的需求跑成一个永动机任务。",
+      "用 research skill 处理我们当前聊天刚才讨论的需求。"
     ]);
   });
 
@@ -83,17 +83,25 @@ describe("plugin manifest", () => {
    * 业务职责：验证插件 skills 把“当前聊天是意图来源、当前目录是执行边界”的规则写清楚，并优先路由到稳定 MCP 工具。
    */
   it("documents current-chat and continue MCP routes", async () => {
+    const slashSkill = await readFile(path.join(pluginRoot, "skills/codex-autoresearch/SKILL.md"), "utf8");
     const currentChatSkill = await readFile(path.join(pluginRoot, "skills/current-chat-autoresearch/SKILL.md"), "utf8");
     const continueSkill = await readFile(path.join(pluginRoot, "skills/continue-current-directory/SKILL.md"), "utf8");
 
+    expect(slashSkill).toContain("/codex-autoresearch");
+    expect(slashSkill).toContain("latest 8 turns");
+    expect(slashSkill).toContain('triggerMode: "slash"');
+    expect(slashSkill).toContain("Do not search for some other chat");
     expect(currentChatSkill).toContain("route_chat_intent");
-    expect(currentChatSkill).toContain("Use the following fixed phrases as the recommended chat-side prompts");
+    expect(currentChatSkill).toContain("Only summarize the latest 8 turns");
+    expect(currentChatSkill).toContain('triggerMode: "natural"');
+    expect(currentChatSkill).toContain('triggerMode: "explicit_skill"');
     expect(currentChatSkill).toContain("Do not pretend to know the current chat id.");
     expect(currentChatSkill).toContain("The current chat decides what should continue.");
     expect(currentChatSkill).toContain("If the latest task goal from the current chat is clearly different");
     expect(currentChatSkill).toContain("Shell commands are fallback only when MCP is unavailable.");
     expect(continueSkill).toContain("route_chat_intent");
-    expect(continueSkill).toContain("Before resuming, reference the latest business goal");
+    expect(continueSkill).toContain("latest 8 turns");
+    expect(continueSkill).toContain("Before resuming, summarize the latest 8 turns");
     expect(continueSkill).toContain("The current chat decides what should continue.");
     expect(continueSkill).toContain("If the current chat goal and the current directory’s latest codex-autoresearch task clearly diverge");
     expect(continueSkill).toContain("If MCP is unavailable, use:");
@@ -106,8 +114,9 @@ describe("plugin manifest", () => {
     const readme = await readFile(path.resolve("README.md"), "utf8");
 
     expect(readme).toContain("### 已经在 `codex resume` 聊天里时怎么用");
-    expect(readme).toContain("用 codex-autoresearch 继续做我们当前聊天里还没完成的事情。");
-    expect(readme).toContain("当前聊天提供目标、约束和未完事项");
+    expect(readme).toContain("/codex-autoresearch");
+    expect(readme).toContain("当前聊天最近 8 轮");
+    expect(readme).toContain("用 research skill 处理我们当前聊天刚才讨论的需求");
     expect(readme).toContain("route_chat_intent");
     expect(readme).toContain("当前版本仍然不能自动读取你眼前这个聊天的内部 id");
   });

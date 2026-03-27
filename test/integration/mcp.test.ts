@@ -17,7 +17,7 @@ describe("mcp server contracts", () => {
   });
 
   /**
-   * 业务职责：验证 MCP server 至少暴露固定的五个对外工具，保证公共接口后续只增不改。
+   * 业务职责：验证 MCP server 至少暴露固定的六个对外工具，保证公共接口后续只增不改。
    */
   it("creates fixed tool set", () => {
     const server = createMcpServer();
@@ -141,6 +141,43 @@ describe("mcp server contracts", () => {
   });
 
   /**
+   * 业务职责：验证聊天窗 slash 入口会把最近聊天窗口交给统一路由，并在匹配旧链路时自动续跑当前目录最近任务。
+   */
+  it("routes slash chat intent to resume_session", async () => {
+    const workspace = await createFakeCodexWorkspace();
+    cleanup.push(workspace.root);
+    process.env.FAKE_CODEX_STATE_FILE = workspace.stateFile;
+    process.env.FAKE_CODEX_BEHAVIOR = "complete_immediately";
+    process.env.CODEX_BIN = workspace.fakeCodexPath;
+
+    const handlers = createMcpHandlers();
+    const stateDir = path.join(workspace.root, ".codex-run");
+
+    await handlers.runTaskTool({
+      task: "补 README 的聊天窗触发说明和 MCP 路由测试",
+      workdir: workspace.workdir,
+      stateDir
+    });
+
+    const response = await handlers.routeChatIntentTool({
+      chatIntent: "/codex-autoresearch",
+      triggerMode: "slash",
+      chatWindowTurns: [
+        "我们已经把 CLI 安装说明补完了。",
+        "还差 README 的聊天窗触发说明和 MCP 路由测试。",
+        "下一步继续补 README 的聊天窗触发说明和 MCP 路由测试。"
+      ],
+      workdir: workspace.workdir,
+      stateDir
+    });
+    const payload = JSON.parse(response.content[0].text);
+
+    expect(payload.action).toBe("resume_session");
+    expect(payload.triggerMode).toBe("slash");
+    expect(payload.reason).toContain("slash trigger");
+  });
+
+  /**
    * 业务职责：验证聊天内“处理当前需求”会在没有续跑信号时直接新建任务，避免固定话术误附着旧链路。
    */
   it("routes new chat intent to run_task", async () => {
@@ -161,6 +198,37 @@ describe("mcp server contracts", () => {
 
     expect(payload.action).toBe("run_task");
     expect(payload.reason).toContain("started a fresh codex-autoresearch task");
+    expect(payload.jobId).toBeTruthy();
+  });
+
+  /**
+   * 业务职责：验证当前聊天里显式点名仓库 skill 时，MCP 路由会真正落到 `run_skill` 风格执行结果。
+   */
+  it("routes explicit skill intent to run_skill", async () => {
+    const workspace = await createFakeCodexWorkspace();
+    cleanup.push(workspace.root);
+    process.env.FAKE_CODEX_STATE_FILE = workspace.stateFile;
+    process.env.FAKE_CODEX_BEHAVIOR = "complete_immediately";
+    process.env.CODEX_BIN = workspace.fakeCodexPath;
+
+    const handlers = createMcpHandlers();
+    const response = await handlers.routeChatIntentTool({
+      chatIntent: "用 research skill 处理我们当前聊天刚才讨论的需求。",
+      triggerMode: "explicit_skill",
+      skillName: "research",
+      chatWindowTurns: [
+        "我们要整理 codex-autoresearch 在聊天窗里怎么触发永动机。",
+        "只关注 README、插件说明和 MCP 路由，不展开更多重构。"
+      ],
+      chatSummary: "整理 codex-autoresearch 在聊天窗里的触发方式。",
+      workdir: workspace.workdir,
+      stateDir: path.join(workspace.root, ".codex-run")
+    });
+    const payload = JSON.parse(response.content[0].text);
+
+    expect(payload.action).toBe("run_skill");
+    expect(payload.skillName).toBe("research");
+    expect(payload.resolvedSkillInputs.topic).toContain("聊天窗");
     expect(payload.jobId).toBeTruthy();
   });
 

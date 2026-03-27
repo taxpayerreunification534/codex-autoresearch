@@ -38,7 +38,7 @@ export function createProgram(): Command {
 
   // 业务职责：`run` 子命令服务于“我已经有一句明确任务文本”的主路径。
   program.command("run").argument("[task]").description("直接执行一条任务文本").action(async (task, command) => {
-    const rootOptions = normalizeCliExecutionContext(command.parent?.opts() ?? {});
+    const rootOptions = normalizeCliExecutionContext(program.opts());
     const resolvedTask = task ?? (rootOptions.interactive ? await ask("请输入任务") : "");
 
     if (!resolvedTask) {
@@ -63,7 +63,7 @@ export function createProgram(): Command {
   });
 
   skill.command("run").argument("<skillName>").option("--set <key=value...>", "传入 skill 输入").description("执行指定 skill").action(async (skillName, options, command) => {
-    const rootOptions = normalizeCliExecutionContext(command.parent?.parent?.opts() ?? {});
+    const rootOptions = normalizeCliExecutionContext(program.opts());
     const inputMap = parseKeyValuePairs(options.set ?? []);
     const result = await runSkillTask({
       ...rootOptions,
@@ -79,7 +79,7 @@ export function createProgram(): Command {
   // 业务职责：`session` 命令组服务于“继续旧任务或查看当前状态”的长任务恢复场景。
   const session = program.command("session").description("恢复或查看已有任务");
   session.command("resume").argument("[sessionId]").option("--last", "恢复最近一次任务").description("按 session id 或最近状态继续运行").action(async (sessionId, options, command) => {
-    const rootOptions = normalizeCliExecutionContext(command.parent?.parent?.opts() ?? {});
+    const rootOptions = normalizeCliExecutionContext(program.opts());
     if (!sessionId && !options.last) {
       throw new InvalidArgumentError("session resume 需要 <session-id> 或 --last。");
     }
@@ -94,7 +94,7 @@ export function createProgram(): Command {
   });
 
   session.command("status").argument("[sessionId]").option("--last", "读取最近一次任务状态").description("查看已有任务当前状态").action(async (sessionId, options, command) => {
-    const rootOptions = normalizeCliExecutionContext(command.parent?.parent?.opts() ?? {});
+    const rootOptions = normalizeCliExecutionContext(program.opts());
     const result = await getTaskStatus({
       sessionId,
       useLast: options.last || !sessionId,
@@ -111,7 +111,7 @@ export function createProgram(): Command {
 
   // 业务职责：`app` 命令为“当前目录已经对了，只差打开 Desktop”提供快捷入口。
   program.command("app").description("在 Codex Desktop 中打开当前目录").action(async (_, command) => {
-    const rootOptions = command.parent?.opts() ?? {};
+    const rootOptions = normalizeCliExecutionContext(program.opts());
     await openCurrentDirectoryInDesktop(rootOptions.workdir, process.env.CODEX_BIN);
   });
 
@@ -329,3 +329,13 @@ function printResult(result: unknown): void {
 
   console.log(serialized);
 }
+
+/**
+ * 业务职责：统一从任意子命令读取根级执行选项，确保 `--state-dir`、`--workdir` 等全局参数
+ * 在 `run`、`skill run`、`session`、`app` 等分支都能稳定继承，不会因为命令层级不同而丢参。
+ *
+ * 设计原因：
+ * 1. commander 在子命令里既有局部选项也有全局选项，直接读 `parent.opts()` 容易受层级影响。
+ * 2. `optsWithGlobals()` 是官方提供的合并读取方式，更适合本项目这种“全局配置 + 子命令动作”的结构。
+ * 3. 统一封装后，后续新增子命令时不需要再手写 `parent?.parent?.opts()` 这种脆弱链路。
+ */

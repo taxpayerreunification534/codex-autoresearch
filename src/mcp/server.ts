@@ -63,17 +63,21 @@ const StatusSchema = {
 };
 
 /**
- * 业务职责：聊天路由 tool schema 定义当前聊天意图、摘要和执行上下文的输入格式，
- * 让插件与外部 agent 能用稳定协议触发“继续还是新建”的统一判断。
+ * 业务职责：聊天路由 tool schema 定义当前聊天意图、最近 8 轮摘要、显式 skill 指令和执行上下文的输入格式，
+ * 让插件与外部 agent 能用稳定协议触发“继续 / 新建 / 运行 skill”的统一判断。
  */
 const RouteChatIntentSchema = {
   chatIntent: z.string().min(1),
   chatSummary: z.string().optional(),
+  chatWindowTurns: z.array(z.string().min(1)).optional(),
+  triggerMode: z.enum(["slash", "natural", "explicit_skill"]).optional(),
+  skillName: z.string().min(1).optional(),
   workdir: z.string().optional(),
   stateDir: z.string().optional(),
   model: z.string().optional(),
   profile: z.string().optional(),
-  maxAttempts: z.number().int().positive().optional()
+  maxAttempts: z.number().int().positive().optional(),
+  skillsRoot: z.string().optional()
 };
 
 /**
@@ -85,7 +89,19 @@ export interface McpHandlers {
   runSkillTool: (input: { skillName: string; inputs?: Record<string, string>; workdir?: string; stateDir?: string; model?: string; interactive?: boolean; maxAttempts?: number }) => Promise<TextContentResponse>;
   resumeSessionTool: (input: { sessionId?: string; jobId?: string; useLast?: boolean; stateDir?: string; maxAttempts?: number }) => Promise<TextContentResponse>;
   getSessionStatusTool: (input: { sessionId?: string; jobId?: string; useLast?: boolean; stateDir?: string }) => Promise<TextContentResponse>;
-  routeChatIntentTool: (input: { chatIntent: string; chatSummary?: string; workdir?: string; stateDir?: string; model?: string; profile?: string; maxAttempts?: number }) => Promise<TextContentResponse>;
+  routeChatIntentTool: (input: {
+    chatIntent: string;
+    chatSummary?: string;
+    chatWindowTurns?: string[];
+    triggerMode?: "slash" | "natural" | "explicit_skill";
+    skillName?: string;
+    workdir?: string;
+    stateDir?: string;
+    model?: string;
+    profile?: string;
+    maxAttempts?: number;
+    skillsRoot?: string;
+  }) => Promise<TextContentResponse>;
   listSkillsTool: () => Promise<TextContentResponse>;
 }
 
@@ -183,7 +199,7 @@ export function createMcpServer(): McpServer {
 
   server.tool("get_session_status", "读取已有任务状态。", StatusSchema, async (input) => handlers.getSessionStatusTool(input));
 
-  server.tool("route_chat_intent", "根据当前聊天意图自动判断继续当前目录任务还是创建新任务。", RouteChatIntentSchema, async (input) =>
+  server.tool("route_chat_intent", "根据当前聊天意图自动判断继续当前目录任务、创建新任务或运行显式 skill。", RouteChatIntentSchema, async (input) =>
     handlers.routeChatIntentTool(input)
   );
 

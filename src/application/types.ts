@@ -83,16 +83,32 @@ export interface GetTaskStatusCommand {
 }
 
 /**
+ * 业务职责：聊天触发模式描述当前请求是从 slash、自然语言还是显式 skill 话术进入，
+ * 让路由层能够针对“当前就在聊天窗里”的不同触发面保持一致又可解释的默认规则。
+ *
+ * 为什么要单独抽成类型：
+ * - 同样都是当前聊天触发，`/codex-autoresearch` 更偏“自动整理并执行”，
+ *   而显式 skill 更偏“我已经明确要走哪个配方”。
+ * - 把触发面写进契约后，MCP、插件和测试都能稳定表达“这次为什么这样路由”。
+ */
+export type ChatTriggerMode = "slash" | "natural" | "explicit_skill";
+
+/**
  * 业务职责：聊天路由命令描述“从当前聊天意图推导执行动作”的输入，
  * 让插件、MCP 和未来聊天入口统一复用同一份意图摘要结构。
  *
  * 示例：
  * - `chatIntent`: “用 codex-autoresearch 继续做我们当前聊天里还没完成的事情。”
  * - `chatSummary`: “继续完善 README 和 MCP 路由测试”
+ * - `chatWindowTurns`: 当前聊天最近 8 轮的提炼结果，用来避免路由层误读更早历史。
  */
 export interface RouteChatIntentCommand extends CommandExecutionContext {
   chatIntent: string;
   chatSummary?: string;
+  chatWindowTurns?: string[];
+  triggerMode?: ChatTriggerMode;
+  skillName?: string;
+  skillsRoot?: string;
 }
 
 /**
@@ -119,6 +135,9 @@ export interface ChatIntentConflictResult {
   chatSummary: string;
   stateDir?: string;
   status: "needs_confirmation";
+  triggerMode?: ChatTriggerMode;
+  skillName?: string;
+  chatWindowTurnsUsed?: number;
 }
 
 /**
@@ -126,11 +145,15 @@ export interface ChatIntentConflictResult {
  * 在普通任务结果上补充路由原因和匹配状态，方便上层解释为什么这样执行。
  */
 export interface ChatIntentExecutionResult extends JobRunResult {
-  action: "run_task" | "resume_session";
+  action: "run_task" | "resume_session" | "run_skill";
   reason: string;
   chatIntent: string;
   chatSummary: string;
   latestTaskMatched: boolean;
+  triggerMode: ChatTriggerMode;
+  skillName?: string;
+  resolvedSkillInputs?: Record<string, string>;
+  chatWindowTurnsUsed: number;
 }
 
 /**

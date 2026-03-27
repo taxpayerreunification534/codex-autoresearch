@@ -1,6 +1,6 @@
 ---
 name: current-chat-autoresearch
-description: Use codex-autoresearch from the current Codex chat and current working directory. Prefer this when the user wants codex-autoresearch to act on what they are already discussing in the current chat.
+description: Use codex-autoresearch from the current Codex chat and current working directory. Prefer this when the user wants the recent chat window to become a resumable long-running task without leaving the chat.
 argument-hint: "[task-or-intent]"
 ---
 
@@ -14,49 +14,54 @@ Default business rules:
 
 1. Treat the current working directory as the execution directory.
 2. Treat the current chat as the intent source, not as a readable thread id.
-3. Before running anything, summarize the latest concrete task, constraints, and unfinished business from the current chat.
-4. Prefer the MCP route tool first, so the plugin can decide whether this chat should continue the latest current-directory task or open a new one.
-5. If the current chat is still too vague to summarize into one concrete task, ask the user to restate the goal in one sentence before running anything.
+3. Only summarize the latest 8 turns from the current chat window.
+4. Before running anything, summarize the concrete task, constraints, and unfinished work from those latest 8 turns.
+5. Prefer the MCP route tool first, so the plugin can decide whether this chat should continue the latest current-directory task, start a new task, or run an explicit repository skill.
+6. If the current chat is still too vague to summarize into one concrete task, ask the user to restate the goal in one sentence before running anything.
 
 ## MCP-First Rules
 
 Preferred route:
 
 1. Extract a concise `chatIntent` from the user’s latest message.
-2. Extract a concrete `chatSummary` from the current chat context.
-3. Call the MCP tool `route_chat_intent`.
-4. Let `route_chat_intent` choose whether to resume the latest current-directory task or start a new task.
-5. If the tool returns `status: "needs_confirmation"`, explain the conflict and ask the user whether to continue the old task or start a new one.
+2. Extract `chatWindowTurns` from the latest 8 turns of the current chat window.
+3. Extract a concrete `chatSummary` from those latest 8 turns.
+4. If the user explicitly named a repository skill such as `research` or `phased-validation`, pass `triggerMode: "explicit_skill"` and `skillName`.
+5. Otherwise pass `triggerMode: "natural"`.
+6. Call the MCP tool `route_chat_intent`.
+7. Let `route_chat_intent` choose whether this should:
+   - resume the latest current-directory task
+   - start a fresh task from the recent chat window
+   - run the named repository skill
+8. If the tool returns `status: "needs_confirmation"`, explain the conflict and ask the user whether to continue the old task or start a new one.
 
-Use the following fixed phrases as the recommended chat-side prompts:
+## Recommended Natural-Language Examples
+
+These are examples, not the only valid phrases:
 
 ```text
-用 codex-autoresearch 处理我们当前聊天里正在讨论的需求。
-用 codex-autoresearch 继续做我们当前聊天里还没完成的事情。
-用 codex-autoresearch 在当前目录开一个新任务。
+用 codex-autoresearch 把我们刚才聊的需求跑成一个永动机任务。
+用 codex-autoresearch 继续做我们刚才这个任务。
+把我们当前聊天最近几轮的内容交给 codex-autoresearch 去继续执行。
+用 research skill 处理我们当前聊天刚才讨论的需求。
+用 phased-validation skill 把我们刚才这个长任务接起来。
 ```
 
-## MCP Tool Contract
+## Explicit Repository Skill Route
 
-`route_chat_intent` is the primary route for this skill.
+When the user explicitly says a repository skill name in the current chat:
 
-It must receive:
-
-1. `chatIntent`: the user’s current natural-language request
-2. `chatSummary`: the summarized business goal from the current chat
-3. Optional `workdir`, `stateDir`, `model`, `profile`, `maxAttempts` only when the user explicitly overrides defaults
-
-It may return:
-
-1. `action: "resume_session"` when the current chat clearly means “continue”
-2. `action: "run_task"` when the current chat clearly means “start or restate a task”
-3. `action: "conflict"` with `status: "needs_confirmation"` when the current chat goal conflicts with the latest current-directory task
+1. Keep the current chat as the business context source.
+2. Keep the current working directory as the execution scope.
+3. Summarize the latest 8 turns.
+4. Pass the named repository skill to `route_chat_intent` instead of running a generic direct task.
+5. Let `route_chat_intent` infer the repository skill inputs from the recent chat window and start the long-running task from that recipe.
 
 ## Continue Route
 
-If the user says anything equivalent to “用 codex-autoresearch 继续做”, “继续做”, “继续当前目录任务”, or “pick up where we left off”, do not create a new task immediately. First summarize the latest task goal and unfinished business from the current chat, then call `route_chat_intent`.
+If the user says anything equivalent to “用 codex-autoresearch 继续做”, “继续做”, “继续当前目录任务”, or “pick up where we left off”, do not create a new task immediately. First summarize the latest 8 turns from the current chat, then call `route_chat_intent`.
 
-The current chat decides what should continue. The current directory decides which codex-autoresearch task chain to attach to.
+The current chat decides what should continue. The current directory decides which codex-autoresearch task chain should be attached.
 
 If the latest task goal from the current chat is clearly different from the current directory’s latest codex-autoresearch task, do not silently resume. Explain the conflict and ask whether the user wants to continue the old task or start a new one.
 
@@ -67,13 +72,13 @@ Shell commands are fallback only when MCP is unavailable.
 Fallback order:
 
 ```bash
-codex-autoresearch "<task summarized from the current chat>"
+codex-autoresearch "<task summarized from the latest 8 turns of the current chat>"
 ```
 
 If the binary is not on `PATH`, use:
 
 ```bash
-node ./dist/src/cli.js "<task summarized from the current chat>"
+node ./dist/src/cli.js "<task summarized from the latest 8 turns of the current chat>"
 ```
 
 If the build does not exist yet but the current directory is this repo, build it first:
@@ -81,7 +86,7 @@ If the build does not exist yet but the current directory is this repo, build it
 ```bash
 npm install
 npm run build
-node ./dist/src/cli.js "<task summarized from the current chat>"
+node ./dist/src/cli.js "<task summarized from the latest 8 turns of the current chat>"
 ```
 
 For explicit continue fallback, use:
@@ -96,5 +101,6 @@ codex-autoresearch session resume --last
 2. Do not ask for `state-dir` in normal current-chat use.
 3. Do not attach to the global most recent session from another project.
 4. Do not pretend to know the current chat id.
-5. Do not mechanically run `resume --last` before checking what the current chat is actually asking to continue.
-6. Do not make shell commands the primary path when MCP is available.
+5. Do not read the whole chat history when the latest 8 turns are enough.
+6. Do not mechanically run `resume --last` before checking what the current chat is actually asking to continue.
+7. Do not make shell commands the primary path when MCP is available.

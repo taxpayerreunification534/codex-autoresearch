@@ -101,6 +101,25 @@ describe("cli entrypoints", () => {
   });
 
   /**
+   * 业务职责：验证 `run` 子命令会继承根级 `--state-dir`，防止全局状态目录参数在子命令层级被吞掉。
+   */
+  it("propagates global state-dir to run subcommand", async () => {
+    const { createProgram } = await import("../../src/cli.js");
+    const program = createProgram();
+    program.exitOverride();
+    const customStateDir = path.resolve("test/manual/runtime/regression-run-state-dir");
+
+    await program.parseAsync(["--state-dir", customStateDir, "run", "校验 state-dir 透传"], { from: "user" });
+
+    expect(runTaskMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        task: "校验 state-dir 透传",
+        stateDir: customStateDir
+      })
+    );
+  });
+
+  /**
    * 业务职责：验证非 TTY 下有 stdin 时会把管道内容当任务文本直接执行，满足 shell 管道式傻瓜用法。
    */
   it("runs piped stdin as task when no args are provided", async () => {

@@ -13,19 +13,24 @@ This skill exists for the “continue what we were already doing here” scenari
 Default business rules:
 
 1. Always scope resume to the current working directory.
-2. Before resuming, reference the latest business goal, constraints, and unfinished work visible in the current chat.
-3. Prefer the current directory’s latest `.codex-run` state only after the current chat makes it clear what should continue.
-4. Reuse the existing task chain when the current chat goal and the current directory’s latest codex-autoresearch task still match.
-5. If the current chat goal and the current directory’s latest codex-autoresearch task clearly diverge, explain the mismatch and ask whether to continue the old task or start a new one.
+2. Before resuming, summarize the latest 8 turns from the current chat window.
+3. Reference the latest business goal, constraints, and unfinished work visible in those latest 8 turns.
+4. Prefer the current directory’s latest `.codex-run` state only after the current chat makes it clear what should continue.
+5. Reuse the existing task chain when the current chat goal and the current directory’s latest codex-autoresearch task still match.
+6. If the current chat goal and the current directory’s latest codex-autoresearch task clearly diverge, explain the mismatch and ask whether to continue the old task or start a new one.
 
 ## MCP-First Rules
 
 Preferred route:
 
-1. First summarize the latest business goal and unfinished work from the current chat.
-2. Call MCP tool `route_chat_intent` with a continue-style `chatIntent`.
-3. Let `route_chat_intent` decide whether the latest current-directory task can be safely resumed.
-4. If the tool returns `action: "conflict"`, ask the user whether to continue the old task or start a new one.
+1. First summarize the latest 8 turns from the current chat window.
+2. Summarize the latest business goal and unfinished work from those turns.
+3. Call MCP tool `route_chat_intent` with:
+   - a continue-style `chatIntent`
+   - `triggerMode: "natural"`
+   - `chatWindowTurns`: the latest 8 turns
+4. Let `route_chat_intent` decide whether the latest current-directory task can be safely resumed.
+5. If the tool returns `action: "conflict"`, ask the user whether to continue the old task or start a new one.
 
 This skill should treat the current chat as the meaning source and the current directory as the attachment scope.
 
@@ -72,4 +77,5 @@ If no resumable session exists in the current directory, explain that no current
 2. Do not ask for session ids unless the user explicitly wants a specific one.
 3. Do not restart the task from scratch when `resume --last` is the right route.
 4. Do not treat “continue” as a blind resume command when the current chat goal is ambiguous or conflicts with the latest local task.
-5. Do not make shell commands the primary path when MCP routing is available.
+5. Do not read the whole chat history when the latest 8 turns are enough.
+6. Do not make shell commands the primary path when MCP routing is available.
