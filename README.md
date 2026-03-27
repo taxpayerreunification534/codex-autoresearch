@@ -481,6 +481,41 @@ npm test
 6. fake `codex` 下的首轮启动、resume、`--last` 和兼容 wrapper
 7. MCP handler 的输入输出契约与错误分支
 
+### 手工真实测试目录约定
+
+为了避免真实联调时把测试素材和运行垃圾散落到仓库根目录，仓库约定把这类内容统一收口到：
+
+```text
+test/manual/
+├── README.md
+├── prompts/
+├── runtime/   # 忽略
+└── output/    # 忽略
+```
+
+约定说明：
+
+1. `test/manual/prompts/` 只放可复用、可提交的真实测试任务模板
+2. `test/manual/runtime/` 只放真实执行时的状态根目录，例如 `latest-job.txt`、`meta.json`、`runner.log`
+3. `test/manual/output/` 只放真实测试为了验证结果而生成的临时产物
+4. `runtime/` 和 `output/` 默认已加入忽略规则，不应提交到仓库
+
+例如验证旧版 `prompt.md -> codex-keep-running.sh` 兼容链路时，推荐这样执行：
+
+```bash
+WORKDIR=$(pwd) \
+STATE_DIR=$(pwd)/test/manual/runtime/legacy-readonly \
+./codex-keep-running.sh ./test/manual/prompts/legacy-readonly.md
+```
+
+如果你希望真实任务产出一个可检查的文件，也推荐把文件写到：
+
+```text
+test/manual/output/
+```
+
+而不是直接写到仓库根目录。
+
 ## 开发说明
 
 仓库优先以 TypeScript/Node 作为主实现。Bash 只保留兼容职责，不再承载核心业务逻辑。

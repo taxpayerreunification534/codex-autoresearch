@@ -4,6 +4,7 @@
  * 让本仓库从单一 Bash 守护脚本升级为正式的 Node 命令行工具。
  */
 import { spawn } from "node:child_process";
+import { realpathSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -264,9 +265,32 @@ export async function main(argv = process.argv): Promise<void> {
 
 /**
  * 业务职责：仅在作为真实可执行文件启动时运行 CLI，避免单测导入参数解析函数时误触发主流程。
+ *
+ * 设计原因：
+ * 1. 本项目既会被源码直接运行，也会被 `npm install -g` 后通过 bin symlink 触发。
+ * 2. 早期实现直接比较 `process.argv[1]` 和 `import.meta.url` 的字面路径，这在源码直跑时成立，
+ *    但在全局安装后通常不成立，因为 bin 往往只是指向 `dist/src/cli.js` 的符号链接。
+ * 3. 真实用户场景里这会造成“命令安装成功、shell 也能找到命令，但执行时完全静默退出”，
+ *    看起来像是永动机没有启动，实际上是入口守卫误判导致 `main()` 根本没执行。
+ *
+ * 业务示例：
+ * - `node dist/src/cli.js run "任务"`：源码路径与入口文件一致，应判定为直接执行。
+ * - `codex-autoresearch "任务"`：全局 bin 是 symlink，也应被视为直接执行，而不是静默返回。
  */
 function isDirectExecution(): boolean {
-  return Boolean(process.argv[1]) && import.meta.url === pathToFileURL(process.argv[1]).href;
+  if (!process.argv[1]) {
+    return false;
+  }
+
+  try {
+    const invokedEntry = pathToFileURL(realpathSync(process.argv[1])).href;
+    const moduleEntry = pathToFileURL(realpathSync(new URL(import.meta.url))).href;
+    return invokedEntry === moduleEntry;
+  } catch {
+    // 业务兜底：极少数环境下 realpath 可能因临时入口、权限或路径异常失败，此时退回原始比较，
+    // 至少保持源码直跑和测试环境的可用性，而不是让真实入口完全失效。
+    return import.meta.url === pathToFileURL(process.argv[1]).href;
+  }
 }
 
 if (isDirectExecution()) {

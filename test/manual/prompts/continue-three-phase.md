@@ -2,7 +2,8 @@
 
 ## 业务目的
 
-这个提示词专门用于验证 `codex-keep-running.sh` 在真实联网 Codex 环境下，是否能够在同一任务未完成时持续 `resume`，而不是只跑一轮就停下。
+这个提示词专门用于验证 `codex-keep-running.sh` 或 `codex-autoresearch legacy` 在真实联网 Codex 环境下，
+是否能够在同一任务未完成时持续 `resume`，而不是只跑一轮就停下。
 
 ## 执行要求
 
@@ -25,7 +26,7 @@
 请把所有测试产物写入：
 
 ```text
-./real-codex-continue-test-output/
+./test/manual/output/continue-three-phase/
 ```
 
 如果目录不存在，请先创建。
@@ -34,7 +35,7 @@
 
 ### 第 1 阶段
 
-请联网查询以下 2 个信息，并把结果写入 `./real-codex-continue-test-output/phase1-latest-info.md`：
+请联网查询以下 2 个信息，并把结果写入 `./test/manual/output/continue-three-phase/phase1-latest-info.md`：
 
 1. 当前 `OpenAI API` 官方文档首页对应的主域名和你实际访问核验到的页面链接。
 2. 当前 `Git` 官方网站首页标题，以及你实际访问核验到的页面链接。
@@ -54,7 +55,7 @@
 
 只有在收到新的用户消息后，才执行这一阶段。
 
-请继续联网查询，并把结果写入 `./real-codex-continue-test-output/phase2-cross-check.md`：
+请继续联网查询，并把结果写入 `./test/manual/output/continue-three-phase/phase2-cross-check.md`：
 
 1. 核验 OpenAI 官方文档里是否包含可见的 API/开发平台入口信息。
 2. 核验 Git 官网首页是否包含下载入口或导航信息。
@@ -76,7 +77,7 @@
 请读取前两个阶段生成的文件，然后输出最终报告到：
 
 ```text
-./real-codex-continue-test-output/final-report.md
+./test/manual/output/continue-three-phase/final-report.md
 ```
 
 最终报告必须包含：
