@@ -12,6 +12,10 @@ import type { ChatIntentConflictResult, ChatIntentRouteResult, RouteChatIntentCo
  */
 export const CHAT_INTENT_ROUTING_POLICY_VERSION = 1;
 
+/**
+ * 业务职责：聊天路由依赖集合把查找最近任务、resume、新建任务和 prompt 读取抽成可替换能力，
+ * 让单测和未来策略扩展都能在不触碰真实引擎的前提下验证路由决策。
+ */
 interface ChatIntentRoutingDependencies {
   resolveResumeTarget: typeof resolveResumeTarget;
   resumeSession: typeof resumeSession;
@@ -19,9 +23,20 @@ interface ChatIntentRoutingDependencies {
   readPromptFile: (promptFile: string) => Promise<string>;
 }
 
+/**
+ * 业务职责：继续信号规则承载“当前聊天更像在接着做旧任务”的语言特征，
+ * 让聊天入口在没有 thread id 的情况下仍能给出稳定默认路由。
+ */
 const CONTINUE_SIGNAL = /继续|接着|接着做|还没完成|继续当前任务|继续做|keep going|continue|resume|pick up where we left off/i;
+/**
+ * 业务职责：新任务信号规则承载“当前聊天更像在启动新需求”的语言特征，
+ * 避免把明显的新 deliverable 静默附着到旧的任务链上。
+ */
 const NEW_TASK_SIGNAL = /新任务|新的任务|新需求|重开|重新开始|开一个新任务|from scratch|new task|start a new|fresh task/i;
 
+/**
+ * 业务职责：默认依赖集合绑定真实引擎能力，保证生产环境下聊天路由能直接驱动统一执行链。
+ */
 const DEFAULT_DEPENDENCIES: ChatIntentRoutingDependencies = {
   resolveResumeTarget,
   resumeSession,
@@ -182,6 +197,7 @@ export function calculateSimilarity(left: string, right: string): number {
 
   let overlap = 0;
   for (const token of leftTokens) {
+    // 业务约束：只统计稳定关键词交集，用轻量方式近似判断两段描述是否仍属于同一业务任务。
     if (rightTokens.has(token)) {
       overlap += 1;
     }

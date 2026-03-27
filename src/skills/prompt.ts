@@ -24,5 +24,6 @@ export async function loadSkillPromptTemplate(directory: string): Promise<string
  * 业务职责：按占位符把 skill 输入渲染成最终任务文本，保证不同入口执行得到完全一致的 prompt。
  */
 export function renderSkillPrompt(promptTemplate: string, values: Record<string, string>): string {
+  // 业务约束：未提供的占位符按空串处理，避免技能渲染阶段抛错破坏批量执行流程。
   return promptTemplate.replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_, key: string) => values[key] ?? "");
 }

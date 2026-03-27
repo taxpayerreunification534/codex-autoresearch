@@ -8,6 +8,10 @@ import { spawn } from "node:child_process";
 import type { JobMetadata } from "./state.js";
 import { JobError } from "./error.js";
 
+/**
+ * 业务职责：Codex 运行选项描述单轮实际下发给 CLI 的 prompt 和模式，
+ * 让统一执行引擎可以在“首轮执行”和“续跑执行”之间稳定切换。
+ */
 export interface CodexRunOptions {
   codexBin: string;
   prompt: string;
@@ -21,6 +25,7 @@ export function buildCodexArgs(metadata: JobMetadata, options: CodexRunOptions):
   const args = options.mode === "initial" ? ["exec", "--json", "-o", metadata.lastMessageFile] : ["exec", "resume", "--json", "-o", metadata.lastMessageFile];
 
   if (metadata.dangerouslyBypass) {
+    // 业务约束：显式危险绕过优先级高于 full-auto，避免两个安全模式同时生效造成语义混乱。
     args.push("--dangerously-bypass-approvals-and-sandbox");
   } else if (metadata.fullAuto) {
     args.push("--full-auto");
@@ -44,8 +49,10 @@ export function buildCodexArgs(metadata: JobMetadata, options: CodexRunOptions):
   }
 
   if (metadata.sessionId) {
+    // 业务约束：已绑定会话时必须优先命中同一条 Codex 上下文，不能退回模糊的 `--last`。
     args.push(metadata.sessionId);
   } else {
+    // 业务约束：只有在还没拿到稳定 session id 时才允许使用 `--last` 作为恢复兜底。
     args.push("--last");
   }
 

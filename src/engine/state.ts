@@ -8,8 +8,16 @@ import { randomUUID } from "node:crypto";
 import type { CompletionProtocol } from "./completion.js";
 import type { JobErrorInfo } from "./error.js";
 
+/**
+ * 业务职责：任务状态枚举统一表达长任务在守护链路中的生命周期阶段，
+ * 供状态文件、CLI、MCP 和测试围绕同一组状态值判断下一步动作。
+ */
 export type JobStatus = "pending" | "running" | "needs_resume" | "completed" | "failed";
 
+/**
+ * 业务职责：任务元信息是状态目录里的核心业务记录，
+ * 保存任务身份、执行配置、完成协议、错误摘要和关键文件路径，供所有入口共享。
+ */
 export interface JobMetadata {
   jobId: string;
   stateDir: string;
@@ -40,6 +48,10 @@ export interface JobMetadata {
   metaFile: string;
 }
 
+/**
+ * 业务职责：状态布局选项描述状态根目录、精确目录和 job id 三种布局控制方式，
+ * 让 direct task、resume 和兼容层都能在同一套目录规则下落盘。
+ */
 export interface StateLayoutOptions {
   stateRoot?: string;
   exactStateDir?: string;
@@ -90,6 +102,7 @@ export async function ensureJobMetadata(
 
   const existing = await readJobMetadata(layout.stateDir);
   if (existing) {
+    // 业务约束：已有任务目录时直接复用元信息，避免重启守护进程时重新生成协议或冲掉历史链路。
     return existing;
   }
 
@@ -126,6 +139,7 @@ export async function readJobMetadata(stateDir: string): Promise<JobMetadata | u
   try {
     const content = await readFile(metaFile, "utf8");
     const metadata = JSON.parse(content) as JobMetadata;
+    // 业务约束：session id 允许从 session-id.txt 补回，避免 meta 与事件流不同步时导致恢复失败。
     metadata.sessionId = metadata.sessionId ?? (await readSessionIdFile(path.join(stateDir, "session-id.txt")));
     return metadata;
   } catch {

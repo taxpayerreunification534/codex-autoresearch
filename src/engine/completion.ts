@@ -4,6 +4,10 @@
  */
 import { randomBytes } from "node:crypto";
 
+/**
+ * 业务职责：完成协议对象保存当前任务轮次的唯一收尾口令，
+ * 让执行引擎、状态文件和完成判定都围绕同一份协议数据工作。
+ */
 export interface CompletionProtocol {
   nonce: string;
   doneToken: string;

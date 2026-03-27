@@ -22,10 +22,13 @@ export async function resolveSkillInputs(
     }
 
     if (interactive) {
+      // 业务约束：交互模式下优先把缺失输入问清楚，避免长任务带着半成品参数启动。
       resolved[name] = await ask(input.prompt ?? `请输入 ${name}`, input.default);
     } else if (input.default) {
+      // 业务约束：非交互模式允许使用配方默认值，保证 automation 和 MCP 调用也能稳定复用 skill。
       resolved[name] = input.default;
     } else if (input.required) {
+      // 业务约束：必填业务输入缺失时必须阻止执行，避免生成模糊 prompt 进入长任务链。
       throw new JobError("SKILL_INPUT_MISSING", `Missing required skill input: ${name}`, false);
     }
   }

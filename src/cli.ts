@@ -35,6 +35,7 @@ export function createProgram(): Command {
   program.option("--dangerously-bypass", "启用危险绕过模式");
   program.option("--no-full-auto", "关闭默认 --full-auto");
 
+  // 业务职责：`run` 子命令服务于“我已经有一句明确任务文本”的主路径。
   program.command("run").argument("[task]").description("直接执行一条任务文本").action(async (task, command) => {
     const rootOptions = normalizeCliExecutionContext(command.parent?.opts() ?? {});
     const resolvedTask = task ?? (rootOptions.interactive ? await ask("请输入任务") : "");
@@ -51,6 +52,7 @@ export function createProgram(): Command {
     printResult(result);
   });
 
+  // 业务职责：`skill` 命令组服务于“把常用任务沉淀成可复用配方”的场景。
   const skill = program.command("skill").description("管理或运行仓库内 skills");
   skill.command("list").description("列出全部 skills").action(async () => {
     const definitions = await listAvailableSkills(path.resolve("skills"));
@@ -73,6 +75,7 @@ export function createProgram(): Command {
     printResult(result);
   });
 
+  // 业务职责：`session` 命令组服务于“继续旧任务或查看当前状态”的长任务恢复场景。
   const session = program.command("session").description("恢复或查看已有任务");
   session.command("resume").argument("[sessionId]").option("--last", "恢复最近一次任务").description("按 session id 或最近状态继续运行").action(async (sessionId, options, command) => {
     const rootOptions = normalizeCliExecutionContext(command.parent?.parent?.opts() ?? {});
@@ -99,16 +102,19 @@ export function createProgram(): Command {
     printResult(result);
   });
 
+  // 业务职责：`mcp` 命令组把仓库能力暴露成标准 MCP 服务，供外部 agent 和插件接入。
   const mcp = program.command("mcp").description("启动仓库自有 MCP server");
   mcp.command("serve").description("以 stdio 启动 MCP 服务").action(async () => {
     await serveMcp();
   });
 
+  // 业务职责：`app` 命令为“当前目录已经对了，只差打开 Desktop”提供快捷入口。
   program.command("app").description("在 Codex Desktop 中打开当前目录").action(async (_, command) => {
     const rootOptions = command.parent?.opts() ?? {};
     await openCurrentDirectoryInDesktop(rootOptions.workdir, process.env.CODEX_BIN);
   });
 
+  // 业务职责：`legacy` 命令继续承接旧版 prompt.md -> shell 的兼容链路，避免历史自动化直接失效。
   program.command("legacy").argument("<promptFile>").description("兼容旧版 prompt.md + shell 包装入口").action(async (promptFile) => {
     const task = promptFile === "-" ? await readStdin() : await readFile(path.resolve(promptFile), "utf8");
     const stateDir = process.env.STATE_DIR ? path.resolve(process.env.STATE_DIR) : undefined;
@@ -126,6 +132,7 @@ export function createProgram(): Command {
     printResult(result);
   });
 
+  // 业务职责：顶层 action 承接“无子命令直接输入任务”与“无参数交互分流”的傻瓜式主入口。
   program.action(async (task) => {
     const rootOptions = normalizeCliExecutionContext(program.opts());
     if (task) {
@@ -198,6 +205,7 @@ export function parseKeyValuePairs(pairs: string[]): Record<string, string> {
       throw new InvalidArgumentError(`Invalid key=value input: ${pair}`);
     }
 
+    // 业务约束：skill 输入格式固定为单个 `key=value`，避免复杂 shell 语法把任务配方输入搞得不可预测。
     const key = pair.slice(0, separatorIndex);
     const value = pair.slice(separatorIndex + 1);
     result[key] = value;
@@ -219,6 +227,7 @@ async function readStdin(): Promise<string> {
   const chunks: Buffer[] = [];
 
   for await (const chunk of process.stdin) {
+    // 业务约束：允许多段 stdin 拼接成一条任务文本，兼容 shell 管道或脚本分段写入。
     chunks.push(Buffer.from(chunk));
   }
 

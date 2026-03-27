@@ -4,6 +4,10 @@
  */
 import type { CommandExecutionContext } from "./types.js";
 
+/**
+ * 业务职责：CLI 执行选项描述 commander 解析后的根级输入，
+ * 让应用层在进入真正业务编排前先统一吸收命令行的零散参数形态。
+ */
 export interface CliExecutionOptions {
   workdir?: string;
   stateDir?: string;
@@ -16,6 +20,10 @@ export interface CliExecutionOptions {
   fullAuto?: boolean;
 }
 
+/**
+ * 业务职责：规范化后的 CLI 上下文描述经过默认值填充后的稳定执行环境，
+ * 让 direct task、skill、resume 和 legacy 都共享同一套运行基线。
+ */
 export interface NormalizedCliExecutionContext extends CommandExecutionContext {
   workdir: string;
   interactive: boolean;

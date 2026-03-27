@@ -25,6 +25,10 @@ import {
   writeJobMetadata
 } from "./state.js";
 
+/**
+ * 业务职责：直接任务运行选项统一描述所有入口最终会传给执行引擎的参数，
+ * 让 CLI、MCP、legacy 和未来新入口都复用同一份任务启动配置。
+ */
 export interface RunTaskOptions {
   task: string;
   workdir?: string;
@@ -44,6 +48,10 @@ export interface RunTaskOptions {
   maxAttempts?: number;
 }
 
+/**
+ * 业务职责：恢复任务运行选项统一描述 session、job 和最近任务恢复所需参数，
+ * 让 resume 入口始终沿用同一套查找和重试配置。
+ */
 export interface ResumeSessionOptions {
   sessionId?: string;
   jobId?: string;
@@ -54,6 +62,10 @@ export interface ResumeSessionOptions {
   maxAttempts?: number;
 }
 
+/**
+ * 业务职责：任务运行结果是所有入口对外暴露的统一业务回执，
+ * 既要能表达完成/失败，也要能给调用方留下继续追踪同一任务的关键标识。
+ */
 export interface JobRunResult {
   jobId: string;
   sessionId?: string;
@@ -64,10 +76,22 @@ export interface JobRunResult {
   error?: JobErrorInfo;
 }
 
+/**
+ * 业务职责：默认确认文本为完成协议的最终确认语句，
+ * 用来降低长任务把普通总结误判成“真的完成”的风险。
+ */
 const DEFAULT_CONFIRM_TEXT = "CONFIRMED: all tasks completed";
+/**
+ * 业务职责：默认续跑提示负责把守护循环重新拉回“继续干活”状态，
+ * 避免 resume 时模型重新总结、重启或等待额外确认。
+ */
 const DEFAULT_RESUME_TEXT =
   "You must respond to this message. Continue any unfinished user-requested work immediately from the current state. Do not restart. Do not summarize. Do not ask for confirmation. If all requested work is already complete, follow the completion protocol below.";
 
+/**
+ * 业务职责：规范化后的运行选项代表执行引擎内部真正依赖的稳定配置，
+ * 让默认值、路径解析和安全开关在进入主循环前一次性收口。
+ */
 interface NormalizedRunOptions {
   task: string;
   workdir: string;
@@ -151,6 +175,7 @@ export async function runTask(options: RunTaskOptions): Promise<JobRunResult> {
   });
 
   if (!workdirIsValid) {
+    // 业务约束：工作目录无效时也必须先创建失败态记录，保证外部系统仍能追踪这次失败请求。
     return failJob(metadata, new JobError("WORKDIR_NOT_FOUND", `WORKDIR does not exist: ${path.resolve(normalized.workdir)}`, false));
   }
 
@@ -213,6 +238,7 @@ export async function resolveResumeTarget(options: {
   const stateRoot = path.resolve(options.stateDir ?? path.resolve(process.cwd(), ".codex-run"));
 
   if (options.jobId) {
+    // 业务约束：显式 job id 的优先级最高，因为它代表调用方已经明确指定了要附着哪条任务链。
     return readJobMetadata(path.join(stateRoot, options.jobId));
   }
 
@@ -224,6 +250,7 @@ export async function resolveResumeTarget(options: {
   }
 
   if (options.useLast) {
+    // 业务约束：`--last` 先尊重 latest-job 指针，只有指针缺失时才退回目录扫描兜底。
     const latestJobId = await readLatestJobId(stateRoot);
     if (latestJobId) {
       const latestJob = await readJobMetadata(path.join(stateRoot, latestJobId));
@@ -278,6 +305,7 @@ async function runLoop(metadata: JobMetadata, codexBin: string, intervalSeconds:
     }
 
     if (maxAttempts && metadata.attemptCount >= maxAttempts) {
+      // 业务约束：命中显式尝试上限时不判失败，而是停在 needs_resume 交给外部继续调度。
       metadata.status = "needs_resume";
       await writeJobMetadata(metadata);
       return buildResult(metadata, lastMessage);
@@ -324,10 +352,12 @@ function sleep(ms: number): Promise<void> {
  */
 function resolveStateRoot(stateDir: string | undefined, workdir: string, workdirIsValid: boolean): string {
   if (stateDir) {
+    // 业务约束：调用方显式指定状态根目录时必须完全尊重，不能再二次推断。
     return path.resolve(stateDir);
   }
 
   if (workdirIsValid) {
+    // 业务约束：默认优先把状态跟随真实工作目录，方便用户“站在当前目录直接用”。
     return path.resolve(workdir, ".codex-run");
   }
 

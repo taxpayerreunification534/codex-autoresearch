@@ -8,6 +8,10 @@ import type { PublicSkillDefinition } from "../application/types.js";
 import { loadSkillManifest, type SkillManifest } from "./manifest.js";
 import { loadSkillPromptTemplate } from "./prompt.js";
 
+/**
+ * 业务职责：完整 skill 定义把 manifest 与 prompt 模板绑在一起，
+ * 作为技能系统内部的标准工作对象，供 application 层直接执行。
+ */
 export interface SkillDefinition {
   manifest: SkillManifest;
   promptTemplate: string;
