@@ -21,6 +21,13 @@
 2. 当前聊天里的自然语言触发
 3. 当前聊天里显式点名仓库任务 skill
 
+当前已知限制：
+
+1. `/codex-autoresearch` 依赖 Codex Desktop 插件系统。
+2. 当前实际运行中，插件系统需要 ChatGPT 登录态才能稳定工作。
+3. 如果 Codex 当前是 API key 鉴权或 custom provider 模式，插件同步可能失败，`/` 列表里不会出现 `/codex-autoresearch`。
+4. 这不是 MCP server 本身失效，而是插件入口不可用；此时请改走自然语言、MCP 或 CLI。
+
 当前插件不做的事情：
 
 1. 不读取当前 chat id

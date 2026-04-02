@@ -20,7 +20,12 @@
 | 全局命令 | 你希望任意项目目录里都能直接敲命令 | `npm install -g .` 或后续发布到 npm 后 `npm install -g codex-autoresearch` | `codex-autoresearch "任务"` |
 | MCP server | 你要把本项目暴露给外部 agent / 插件 / MCP client | 构建后运行 `codex-autoresearch mcp serve`，或通过插件内 `.mcp.json` 连接 | `run_task` / `run_skill` / `resume_session` / `route_chat_intent` |
 | 仓库自有 skill | 你希望把常用任务做成可复用配方 | 无需额外安装，构建后直接用 CLI 或 MCP 调用 `skills/<name>/skill.yaml + prompt.md` | `codex-autoresearch skill run ...` 或 MCP `run_skill` |
-| Codex 插件 | 你已经在 Codex 聊天窗里，希望直接在当前窗口触发 | 使用仓库内 `plugins/codex-autoresearch/` 和 `.agents/plugins/marketplace.json` 安装本地插件 | `/codex-autoresearch` / 自然语言 / 显式 skill 名 |
+| Codex 插件 | 你已经在 Codex 聊天窗里，希望直接在当前窗口触发 | 使用仓库内 `plugins/codex-autoresearch/` 和 `.agents/plugins/marketplace.json` 安装本地插件；`/codex-autoresearch` 目前要求 ChatGPT 登录的 Codex Desktop | `/codex-autoresearch` / 自然语言 / 显式 skill 名 |
+
+插件入口提醒：
+
+1. 如果你想使用 `/codex-autoresearch`，请优先确认当前 Codex Desktop 是 ChatGPT 登录态。
+2. 如果你当前是 API key 或 custom provider 模式，推荐直接使用自然语言、MCP 或 CLI，不要先假设 slash 可见。
 
 最小本地安装：
 
@@ -64,6 +69,12 @@ codex-autoresearch --help
 | 在 Codex Desktop 打开当前目录 | `codex-autoresearch app` |
 
 如果你已经在 `codex resume` 聊天窗里，主路径已经改成“当前聊天最近 8 轮 + 插件走 MCP 自动触发”，不再要求先想 shell 命令：
+
+前提提醒：
+
+1. `/codex-autoresearch` 这条路径要求 Codex Desktop 插件系统可用。
+2. 当前已知最稳定的前提是 ChatGPT 登录态。
+3. 如果你使用 API key / custom provider，请优先改用下面两条自然语言路径。
 
 ```text
 /codex-autoresearch
@@ -438,6 +449,12 @@ codex-autoresearch app
 
 ### 6. 在 Codex 聊天里使用插件
 
+重要前提：
+
+1. 想在 `/` 列表里看到 `/codex-autoresearch`，当前需要 ChatGPT 登录的 Codex Desktop。
+2. 如果当前是 API key 鉴权或 custom provider 模式，插件同步可能失败，此时即使 MCP server 正常，slash 入口也可能不可见。
+3. 遇到这种情况时，请直接改用自然语言触发、MCP tool 或 CLI。
+
 仓库现在内置了 repo-local Codex 插件，位置在：
 
 ```text
@@ -565,7 +582,19 @@ marketplace 清单在：
 
 关于 slash 能力：
 
-当前版本把 `/codex-autoresearch` 定义为插件安装后的正式聊天窗入口。仅装 CLI 是否能在任意 Codex 聊天窗里自动注册同名 slash，仍取决于平台是否公开稳定能力；如果平台不支持，这会被视为平台限制，而不是本项目主链路失效。
+当前版本把 `/codex-autoresearch` 定义为插件安装后的正式聊天窗入口。仅装 CLI 不会自动把同名 slash 注册到任意 Codex 聊天窗里，必须走插件链路。
+
+当前已知限制：
+
+1. `/codex-autoresearch` 依赖 Codex Desktop 的插件系统正常工作。
+2. 该插件系统当前要求使用 ChatGPT 账号登录的 Codex Desktop。
+3. 如果你当前是 API key 鉴权，或使用 custom provider 直连模型，插件系统可能无法完成 plugin sync，`/` 列表里也不会出现 `/codex-autoresearch`。
+4. 在这类环境下，本项目仍可通过 MCP 和 CLI 使用，但不能承诺 slash 入口可用。
+
+一句话判断：
+
+1. 想使用 `/codex-autoresearch`：请先用 ChatGPT 登录 Codex Desktop。
+2. 如果你使用的是 API key / custom provider：优先改用自然语言触发、MCP tool 或 CLI，不要假设 slash 一定可见。
 
 固定暴露的工具：
 
