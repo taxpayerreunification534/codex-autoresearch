@@ -22,7 +22,7 @@ Three-layer design (engine → application → transport):
 
 3. **Transports**:
    - **CLI** (`src/cli.ts`) — Commander-based CLI with subcommands: `run` (supports `--prompt-file`), `skill`, `session`, `mcp serve`, `app`, `legacy`.
-   - **MCP** (`src/mcp/server.ts`) — MCP server exposing 7 tools: `start_task_from_prompt_file`, `run_task`, `run_skill`, `resume_session`, `get_session_status`, `tail_session`, `list_skills`.
+   - **MCP** (`src/mcp/server.ts`) — MCP server exposing 1 tool: `run_task` (blocking until completion).
    - **Presenter** (`src/presenters/json.ts`) — JSON output formatting.
 
 Cross-cutting module:
@@ -40,6 +40,6 @@ Cross-cutting module:
 - `codex-keep-running.sh` is a shell thin wrapper that delegates to the Node CLI `legacy` command.
 - New entry points should only add transport adapters; business logic stays in `application/`.
 
-## MCP fire-and-forget
+## MCP blocking mode
 
-MCP execution tools (`run_task`, `start_task_from_prompt_file`, `run_skill`) use `fireAndForget: true` by default — they start the background task and return immediately with `pending` status. Callers should poll progress via `tail_session` or `get_session_status`. This avoids MCP transport timeout (120s) on long-running tasks. CLI does NOT use fire-and-forget; it blocks until completion.
+MCP `run_task` uses `fireAndForget: false` — the MCP tool handler blocks (does not return) until the background `runLoop` completes. This keeps the host chat blocked so it cannot create duplicate tasks or interfere. CLI also blocks until completion (same behavior).

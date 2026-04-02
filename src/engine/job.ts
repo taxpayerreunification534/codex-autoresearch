@@ -2,7 +2,7 @@
  * 业务职责：统一执行引擎负责承接 direct task、skill、兼容脚本和 MCP 请求，
  * 并确保它们都走同一套 session 续跑、完成协议和状态持久化流程。
  */
-import { readFile, writeFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { buildCompletionProtocolText, createCompletionProtocol, isCompletionMessage } from "./completion.js";
 import { discoverSessionId, runCodex } from "./codex.js";
@@ -51,6 +51,8 @@ export interface RunTaskOptions {
   sourcePromptFile?: string;
   /** 如果为 true，启动后台执行但立即返回 pending 状态，不阻塞等待完成。 */
   fireAndForget?: boolean;
+  /** 每轮 codex 退出后调用的进度回调，用于 MCP 进度通知等场景。 */
+  onProgress?: (status: { attempt: number; lastMessage: string }) => void;
 }
 
 /**
@@ -112,58 +114,17 @@ export interface SessionTailResult extends JobRunResult {
  */
 const DEFAULT_CONFIRM_TEXT = "CONFIRMED: all tasks completed";
 /**
- * 业务职责：默认续跑提示负责把守护循环重新拉回“继续干活”状态，
- * 避免 resume 时模型重新总结、重启或等待额外确认。
+ * 业务职责：默认续跑提示只说”继续”，模拟用户手动操作时的最小指令。
  */
-const DEFAULT_RESUME_TEXT = [
-  "You must respond to this message. You are being auto-resumed by the perpetual task runner.",
-  "",
-  "CRITICAL INSTRUCTIONS:",
-  "- Continue any unfinished work IMMEDIATELY. Do not restart from scratch. Do not re-read files you already processed.",
-  "- First, check what output files already exist on disk (ls the output directory). Resume from where you left off — write the NEXT unfinished file.",
-  "- Do not summarize what was done before. Do not ask for confirmation. Do not output a plan.",
-  "- Your very first tool call should either check existing output OR start writing the next file.",
-  "- You are running autonomously with NO human in the loop. Never stop to ask questions. Never pause between steps.",
-  "- If all requested work is already complete, follow the completion protocol below."
-].join("\n");
+const DEFAULT_RESUME_TEXT = "继续";
 
 /**
- * 业务职责：后台执行边界文本明确区分当前任务是 worker plane 而不是前台控制层，
- * 防止长任务在执行过程中再次调用 codex-autoresearch 的 MCP 工具而触发宿主取消或递归编排。
+ * 业务职责：后台执行边界文本区分当前任务是 worker plane 而不是前台控制层，
+ * 防止长任务在执行过程中再次调用 codex-autoresearch 的 MCP 工具。
  */
 const WORKER_EXECUTION_BOUNDARY_TEXT = [
-  "Execution boundary for this task:",
-  "- You are running as the background worker for an existing codex-autoresearch task, not as the control plane.",
-  "- Do not call codex-autoresearch MCP tools from inside this task.",
-  "- Do not invoke run_task, start_task_from_prompt_file, run_skill, resume_session, get_session_status, tail_session, or list_skills.",
-  "- If you need prior task state, read local files under the current task state directory such as meta.json, last-message.txt, attempt snapshots, runner.log, or events.jsonl instead of calling MCP.",
-  "- Your job is to do the business work and produce the requested result, not to orchestrate codex-autoresearch itself."
-].join("\n");
-
-/**
- * 业务职责：Worker 行为约束文本强制后台执行者尽早产出文件而不是无限调研，
- * 防止 context 被调研内容耗尽后永动机 resume 又重新调研的死循环。
- */
-const WORKER_BEHAVIOR_CONSTRAINTS_TEXT = [
-  "Worker behavior constraints (MANDATORY — violating these will cause the task to loop without progress):",
-  "",
-  "AUTONOMY — NEVER STOP TO ASK:",
-  "- You are running autonomously with NO human in the loop. There is nobody to answer your questions.",
-  "- NEVER stop to ask 'should I continue?', 'do you want me to proceed?', 'shall I write the next chapter?', or any similar question.",
-  "- NEVER output a summary and wait for confirmation. NEVER pause between steps.",
-  "- NEVER end your turn with a question or a 'next steps' list. If there is more work to do, DO IT NOW in this same turn.",
-  "- If you are unsure about a decision, make the best reasonable choice and keep going. Wrong content on disk is better than no content on disk.",
-  "- Your turn should only end when ALL work is complete (then use the completion protocol) or when you physically run out of context/output space.",
-  "",
-  "WRITE EARLY, WRITE OFTEN:",
-  "- You MUST start writing/creating the first output file within your first 2 tool calls. Do not spend more than 2 tool calls on research before producing output.",
-  "- Do not do exhaustive research before writing. If the task references a plan, spec, or existing document, trust it and write directly based on it.",
-  "- Write incrementally: finish one unit of work (one file, one section, one chapter), save it to disk immediately, then move to the next. Never accumulate all content in memory before writing.",
-  "- If you need to read a reference file, read it once and start writing immediately after. Do not re-read the same file or read adjacent files 'just in case'.",
-  "- Prefer writing good-enough content now over perfect content never. You can always be resumed to improve earlier output.",
-  "",
-  "TOOL FAILURES:",
-  "- If an MCP tool call fails or is cancelled, fall back to local tools (rg, sed, cat) immediately. Do not spend more than 1 tool call on the fallback."
+  "你在后台独立执行，没有人会回复你的问题。不要停下来询问，直接做。",
+  "不要调用 codex-autoresearch 的 MCP 工具（run_task 等）。"
 ].join("\n");
 
 /**
@@ -202,6 +163,7 @@ interface NormalizedRunOptions {
   promptSource?: "file" | "text" | "skill";
   sourcePromptFile?: string;
   fireAndForget: boolean;
+  onProgress?: (status: { attempt: number; lastMessage: string }) => void;
 }
 
 /**
@@ -211,15 +173,15 @@ export function buildInitialPrompt(task: string, confirmText: string, rawNonce?:
   const protocol = createCompletionProtocol(confirmText, rawNonce);
   return {
     protocol,
-    prompt: `${task}\n\n${WORKER_EXECUTION_BOUNDARY_TEXT}\n\n${WORKER_BEHAVIOR_CONSTRAINTS_TEXT}\n\n${buildCompletionProtocolText(protocol)}\n`
+    prompt: `${task}\n\n${WORKER_EXECUTION_BOUNDARY_TEXT}\n\n${buildCompletionProtocolText(protocol)}\n`
   };
 }
 
 /**
- * 业务职责：构建续跑提示，只提醒 Codex 继续推进当前任务而不重复灌入原始全文。
+ * 业务职责：构建续跑提示，极简——只说"继续"加上可选的完成协议提前退出机制。
  */
 export function buildResumePrompt(protocol: ReturnType<typeof createCompletionProtocol>, resumeTextBase = DEFAULT_RESUME_TEXT): string {
-  return `${resumeTextBase}\n\n${WORKER_EXECUTION_BOUNDARY_TEXT}\n\n${buildCompletionProtocolText(protocol)}\n`;
+  return `${resumeTextBase}\n\n${buildCompletionProtocolText(protocol)}\n`;
 }
 
 /**
@@ -245,7 +207,8 @@ export function normalizeRunOptions(options: RunTaskOptions): NormalizedRunOptio
     maxAttempts: options.maxAttempts,
     promptSource: options.promptSource,
     sourcePromptFile: options.sourcePromptFile,
-    fireAndForget: options.fireAndForget ?? false
+    fireAndForget: options.fireAndForget ?? false,
+    onProgress: options.onProgress
   };
 }
 
@@ -277,17 +240,15 @@ export async function runTask(options: RunTaskOptions): Promise<JobRunResult> {
     return failJob(metadata, new JobError("WORKDIR_NOT_FOUND", `WORKDIR does not exist: ${path.resolve(normalized.workdir)}`, false));
   }
 
-  await writeFile(metadata.initialPromptFile, initialPrompt, "utf8");
-  await writeFile(metadata.resumePromptFile, buildResumePrompt(protocol, normalized.resumeTextBase), "utf8");
+  const resumePrompt = buildResumePrompt(protocol, normalized.resumeTextBase);
 
   if (normalized.fireAndForget) {
     // 业务约束：fire-and-forget 模式下只初始化状态目录并在后台启动执行，不阻塞等待完成。
-    // 适用于 MCP 调用场景，调用方应通过 tail_session / get_session_status 轮询进度。
-    void runLoop(metadata, normalized.codexBin, normalized.intervalSeconds, normalized.maxAttempts);
+    void runLoop(metadata, initialPrompt, resumePrompt, normalized.codexBin, normalized.intervalSeconds, normalized.maxAttempts, normalized.onProgress);
     return buildResult(metadata, "");
   }
 
-  return runLoop(metadata, normalized.codexBin, normalized.intervalSeconds, normalized.maxAttempts);
+  return runLoop(metadata, initialPrompt, resumePrompt, normalized.codexBin, normalized.intervalSeconds, normalized.maxAttempts, normalized.onProgress);
 }
 
 /**
@@ -311,7 +272,10 @@ export async function resumeSession(options: ResumeSessionOptions): Promise<JobR
     await writeJobMetadata(metadata);
   }
 
-  return runLoop(metadata, options.codexBin ?? process.env.CODEX_BIN ?? "codex", options.intervalSeconds ?? 3, options.maxAttempts);
+  const protocol = createCompletionProtocol(metadata.confirmText, metadata.nonce.replace(/-/g, ""));
+  const resumePrompt = buildResumePrompt(protocol);
+
+  return runLoop(metadata, "", resumePrompt, options.codexBin ?? process.env.CODEX_BIN ?? "codex", options.intervalSeconds ?? 3, options.maxAttempts);
 }
 
 /**
@@ -416,9 +380,7 @@ export async function resolveResumeTarget(options: {
 /**
  * 业务职责：执行主守护循环，持续推进同一任务直到收到严格完成协议或命中显式尝试上限。
  */
-async function runLoop(metadata: JobMetadata, codexBin: string, intervalSeconds: number, maxAttempts?: number): Promise<JobRunResult> {
-  const initialPrompt = await readFile(metadata.initialPromptFile, "utf8");
-  const resumePrompt = await readFile(metadata.resumePromptFile, "utf8");
+async function runLoop(metadata: JobMetadata, initialPrompt: string, resumePrompt: string, codexBin: string, intervalSeconds: number, maxAttempts?: number, onProgress?: (status: { attempt: number; lastMessage: string }) => void): Promise<JobRunResult> {
   const hasSessionId = Boolean(metadata.sessionId || (await readSessionIdFile(metadata.sessionIdFile)));
   let nextMode: "initial" | "resume" =
     metadata.attemptCount === 0 && !hasSessionId && !(await hasResumeArtifacts(metadata)) ? "initial" : "resume";
@@ -446,6 +408,7 @@ async function runLoop(metadata: JobMetadata, codexBin: string, intervalSeconds:
 
     await snapshotAttempt(metadata, metadata.attemptCount);
     const lastMessage = await readLastMessage(metadata);
+    onProgress?.({ attempt: metadata.attemptCount, lastMessage });
     const blockingFailure = await detectBlockingFailureSince(metadata.eventLogFile, previousEventLog);
     if (blockingFailure) {
       metadata.lastError = blockingFailure;

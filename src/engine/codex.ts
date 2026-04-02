@@ -3,7 +3,7 @@
  * 并把结构化事件与运行日志稳定追加到任务状态目录中。
  */
 import { createWriteStream } from "node:fs";
-import { readFile } from "node:fs/promises";
+import { appendFile, readFile } from "node:fs/promises";
 import { spawn } from "node:child_process";
 import type { JobMetadata } from "./state.js";
 import { JobError } from "./error.js";
@@ -65,10 +65,14 @@ export function buildCodexArgs(metadata: JobMetadata, options: CodexRunOptions):
  */
 export async function runCodex(metadata: JobMetadata, options: CodexRunOptions): Promise<number> {
   const args = buildCodexArgs(metadata, options);
+  const promptPreview = options.prompt.length > 200 ? `${options.prompt.slice(0, 200)}...` : options.prompt;
+  const logLine = `[${new Date().toISOString()}] ${options.codexBin} ${args.slice(0, -1).join(" ")} <prompt: ${promptPreview}>\n`;
+  await appendFile(metadata.runnerLogFile, logLine, "utf8");
+
   const stdoutStream = createWriteStream(metadata.eventLogFile, { flags: "a" });
   const stderrStream = createWriteStream(metadata.runnerLogFile, { flags: "a" });
 
-  return await new Promise<number>((resolve, reject) => {
+  const exitCode = await new Promise<number>((resolve, reject) => {
     const child = spawn(options.codexBin, args, {
       cwd: options.mode === "resume" ? metadata.workdir : undefined,
       env: process.env,
@@ -85,6 +89,9 @@ export async function runCodex(metadata: JobMetadata, options: CodexRunOptions):
     stdoutStream.end();
     stderrStream.end();
   });
+
+  await appendFile(metadata.runnerLogFile, `[${new Date().toISOString()}] exited with code ${exitCode}\n`, "utf8");
+  return exitCode;
 }
 
 /**

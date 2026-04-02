@@ -41,8 +41,6 @@ export interface JobMetadata {
   lastError?: JobErrorInfo;
   promptSource?: "file" | "text" | "skill";
   sourcePromptFile?: string;
-  initialPromptFile: string;
-  resumePromptFile: string;
   lastMessageFile: string;
   eventLogFile: string;
   runnerLogFile: string;
@@ -63,7 +61,7 @@ export interface StateLayoutOptions {
 /**
  * 业务职责：统一计算任务目录结构，保证不同入口对状态文件的命名和落盘位置完全一致。
  */
-export function createStateLayout(options: StateLayoutOptions = {}): Pick<JobMetadata, "jobId" | "stateDir" | "stateRoot" | "initialPromptFile" | "resumePromptFile" | "lastMessageFile" | "eventLogFile" | "runnerLogFile" | "sessionIdFile" | "metaFile"> {
+export function createStateLayout(options: StateLayoutOptions = {}): Pick<JobMetadata, "jobId" | "stateDir" | "stateRoot" | "lastMessageFile" | "eventLogFile" | "runnerLogFile" | "sessionIdFile" | "metaFile"> {
   const stateRoot = path.resolve(options.stateRoot ?? ".codex-run");
   const jobId = options.jobId ?? randomUUID();
   const stateDir = options.exactStateDir ? path.resolve(options.exactStateDir) : path.join(stateRoot, jobId);
@@ -72,8 +70,6 @@ export function createStateLayout(options: StateLayoutOptions = {}): Pick<JobMet
     jobId,
     stateDir,
     stateRoot,
-    initialPromptFile: path.join(stateDir, "initial-prompt.txt"),
-    resumePromptFile: path.join(stateDir, "resume-prompt.txt"),
     lastMessageFile: path.join(stateDir, "last-message.txt"),
     eventLogFile: path.join(stateDir, "events.jsonl"),
     runnerLogFile: path.join(stateDir, "runner.log"),

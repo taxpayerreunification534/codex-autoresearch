@@ -33,6 +33,7 @@ export interface RunDirectTaskCommand extends CommandExecutionContext {
   confirmText?: string;
   resumeTextBase?: string;
   fireAndForget?: boolean;
+  onProgress?: (status: { attempt: number; lastMessage: string }) => void;
 }
 
 /**
@@ -114,6 +115,7 @@ export function toRunTaskOptions(command: RunDirectTaskCommand): RunTaskOptions 
     maxAttempts: command.maxAttempts,
     promptSource: command.promptSource,
     sourcePromptFile: command.sourcePromptFile,
-    fireAndForget: command.fireAndForget
+    fireAndForget: command.fireAndForget,
+    onProgress: command.onProgress
   };
 }

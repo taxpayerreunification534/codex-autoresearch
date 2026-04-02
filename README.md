@@ -1,15 +1,68 @@
 # codex-autoresearch
 
-它的目标很直接：当你希望 Codex 在无人值守时持续推进同一项任务，这个脚本会先发起一次 `codex exec`，之后不断对同一会话执行 `codex exec resume`，直到收到严格的完成协议为止，而不是仅凭一句“我做完了”就停下。
+一个围绕 Codex CLI 的永动机包装器：开一个 codex 对话把任务给它，模型干一部分活停了，自动 resume 同一个对话说"继续"，循环直到全部做完。
 
-核心架构：
+## 工作流程
 
-1. **CLI** 直接执行任务或从 prompt 文件启动
-2. **MCP server** 作为对外执行服务
-3. **Skills** 作为可复用任务配方
-4. **codex-keep-running.sh** 作为 shell 形式的文件驱动入口
+以用户在 Claude Code 对话框输入以下内容为例：
 
-任务定义只认 prompt 文件或显式文本参数。不支持根据当前聊天自动总结任务、不支持"最近 N 轮"触发、不支持 slash/chat 路由。对于 MCP 自动化，推荐先生成 prompt.md 再调用。
+> 使用 codex-autoresearch MCP 工具完成这个 /Users/wang/.../12-58章写作规划.md 规划
+
+```
+用户对话框                         Claude Code (宿主 Agent)                     codex-autoresearch MCP                        Codex CLI (Worker)
+    |                                      |                                           |                                              |
+    |  "使用 MCP 完成这个规划"              |                                           |                                              |
+    | -----------------------------------> |                                           |                                              |
+    |                                      |                                           |                                              |
+    |                                      |  1. 读取 .md 文件内容                     |                                              |
+    |                                      |  2. 调用 run_task(task=文件内容)           |                                              |
+    |                                      | ----------------------------------------> |                                              |
+    |                                      |                                           |                                              |
+    |                                      |    （聊天被阻塞，宿主无法做其他事情）       |                                              |
+    |                                      |                                           |                                              |
+    |                                      |                                           |  ensureJobMetadata                            |
+    |                                      |                                           |  创建 .codex-run/<job-id>/meta.json           |
+    |                                      |                                           |                                              |
+    |                                      |                                           |  ========== runLoop 开始 ==========           |
+    |                                      |                                           |                                              |
+    |                                      |                                           |  buildInitialPrompt:                          |
+    |                                      |                                           |    任务文本                                    |
+    |                                      |                                           |    + 执行边界(2行)                             |
+    |                                      |                                           |    + completion protocol                      |
+    |                                      |                                           |                                              |
+    |                                      |                                           |  codex exec --full-auto <prompt>              |
+    |                                      |                                           | -------------------------------------------> |
+    |                                      |                                           |                                              |  开始写第12-15章...
+    |                                      |                                           |                                              |  context 用完 / 惰性停止
+    |                                      |                                           |  <-- exit code 0 --------------------------> |
+    |                                      |                                           |                                              |
+    |                                      |                                           |  检查 last-message.txt                        |
+    |                                      |                                           |  没有匹配 completion protocol                 |
+    |                                      |                                           |  等 3 秒                                      |
+    |                                      |                                           |                                              |
+    |                                      |                                           |  codex exec resume <session-id> "继续"         |
+    |                                      |                                           | -------------------------------------------> |
+    |                                      |                                           |                                              |  接着写第16-20章...
+    |                                      |                                           |                                              |  又停了
+    |                                      |                                           |  <-- exit ---------------------------------> |
+    |                                      |                                           |                                              |
+    |                                      |                                           |  ... 重复 N 轮 ...                            |
+    |                                      |                                           |                                              |
+    |                                      |                                           |  <-- exit ---------------------------------> |
+    |                                      |                                           |  检查 last-message.txt                        |
+    |                                      |                                           |  匹配 completion protocol 或 maxAttempts      |
+    |                                      |                                           |  status -> completed / needs_resume           |
+    |                                      |                                           |                                              |
+    |                                      |  <-- 返回 {status: completed, lastMessage} |                                              |
+    |  <-- "全部完成，12-58章已写好"         |                                           |                                              |
+    |                                      |                                           |                                              |
+```
+
+**关键设计**：
+- 宿主 Agent 只是控制面——读文件、调 MCP，不自己做研究
+- MCP 层阻塞模式——调用后聊天卡住，完成后才释放，宿主无法重复创建任务或越俎代庖
+- 永动机核心循环：`codex exec` → 退出 → `codex exec resume "继续"` → 退出 → 循环
+- resume prompt 就一个字——"继续"，不塞行为约束，不重复任务描述
 
 ## 安装
 
@@ -53,26 +106,22 @@ codex-autoresearch mcp serve
 
 | 工具 | 说明 |
 | --- | --- |
-| `start_task_from_prompt_file` | 从 prompt 文件启动新任务，文件内容作为唯一初始 prompt |
-| `run_task` | 运行一个直接任务 |
-| `run_skill` | 运行仓库内 skill 配方 |
-| `resume_session` | 续跑已有 session 或最近一次任务 |
-| `get_session_status` | 读取已有任务状态 |
-| `tail_session` | 读取已有任务最近的执行步骤与日志尾部 |
-| `list_skills` | 列出仓库内可用 skills |
+| `run_task` | 启动永动机任务，阻塞直到完成后返回最终结果 |
+
+调用后聊天会被阻塞，宿主不需要（也无法）做任何其他事情，等待返回即可。任务可能需要几分钟到几十分钟。
 
 推荐主路径示例：
 
 ```json
 {
-  "tool": "start_task_from_prompt_file",
+  "tool": "run_task",
   "arguments": {
-    "promptFile": "./prompt.md"
+    "task": "（完整任务描述文本）"
   }
 }
 ```
 
-每个执行类 tool 都会返回 `jobId`、`sessionId`、`stateDir`、`status`、`lastMessageFile`。
+返回 `jobId`、`sessionId`、`stateDir`、`status`、`lastMessageFile`。
 
 ## .codex-run 状态模型
 
@@ -91,8 +140,6 @@ codex-autoresearch mcp serve
 | `runner.log` | 执行日志和错误输出 |
 | `last-message.txt` | 最近一轮 assistant 最终输出 |
 | `session-id.txt` | 从事件流提取的 session id |
-| `initial-prompt.txt` | 首轮真正下发给 Codex 的任务（prompt 文件快照） |
-| `resume-prompt.txt` | 后续 resume 使用的续跑提示 |
 
 `meta.json` 中记录的 prompt 来源字段：
 
@@ -100,8 +147,6 @@ codex-autoresearch mcp serve
 | --- | --- |
 | `promptSource` | `"file"` / `"text"` / `"skill"` |
 | `sourcePromptFile` | 原始 prompt 文件绝对路径（仅 `promptSource: "file"` 时有值） |
-
-任务启动时，源文件内容会快照到 `initial-prompt.txt`。后续 resume 只依赖 `.codex-run`，不回读原文件。
 
 ## 恢复、查看状态、tail
 
@@ -115,8 +160,6 @@ codex-autoresearch session status --last
 # 按 session id 继续
 codex-autoresearch session resume <session-id>
 ```
-
-MCP 侧使用 `resume_session`、`get_session_status`、`tail_session`。
 
 ## Skills
 
