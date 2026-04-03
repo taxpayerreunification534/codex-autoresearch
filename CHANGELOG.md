@@ -5,11 +5,42 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.4] - 2025-04-03
+
+### 核心亮点
+
+规划型任务支持"冻结目标 + 可变规划"：规划文件可以修正，但冻结目标不会变。
+
+**重要**：prompt.md 必须包含规划章节，明确说明当前状态、从哪里开始、做什么任务，否则大模型会自己幻想。
+
+### Added
+
+- **冻结目标机制**
+  - `--frozen-goals-text` 显式传冻结目标文本
+  - 规划文件可修正，冻结目标不变
+  - `completion_report` 校验覆盖全部冻结目标
+
+- **状态文件**
+  - `goal-contract.md` - 冻结目标契约
+  - `goal-manifest.json` - 结构化冻结目标清单
+  - `working-plan.latest.md` - 当前最新规划文件快照
+  - `plan-revisions.jsonl` - 规划文件修订记录
+
+- **CLI 增强**
+  - `codex-autoresearch --version` 查看版本
+
+### Changed
+
+- 从"永动机包装器"定位为"长任务包装器"
+- 完成判定增加 `completion_report` 校验
+
+---
+
 ## [0.1.3] - 2025-04-03
 
 ### 核心亮点
 
-首个正式版本。围绕 Codex CLI 的永动机包装器：开一个 codex 对话把任务给它，模型干一部分活停了，自动 resume 同一个对话说"继续"，循环直到全部做完。
+首个正式版本。围绕 Codex CLI 的长任务包装器：开一个 Codex 对话把任务给它，模型干一部分活停了，自动 resume 同一个对话说"继续"，循环直到全部做完。
 
 **重要**：prompt.md 必须包含规划章节，明确说明当前状态、从哪里开始、做什么任务，否则大模型会自己幻想。
 
@@ -28,5 +59,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - 移除 MCP、Skills 相关代码，简化为纯 CLI 工具
-- 执行引擎下沉为共享层，支持多入口复用/
+- 执行引擎下沉为共享层，支持多入口复用
 - 状态目录统一为 `.codex-run/<job-id>/`
