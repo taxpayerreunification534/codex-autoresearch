@@ -1,11 +1,11 @@
 /**
  * 业务职责：CLI 参数测试负责锁住 `--frozen-goals-text` 的入口语义，
  * 防止后续改动让显式冻结目标参数在没有 prompt-file 的场景下被误接受，
- * 以及保证版本号命令始终对齐 package.json。
+ * 以及保证版本号命令与执行策略参数始终对齐真实发布行为。
  */
 import { createRequire } from "node:module";
 import { describe, expect, it } from "vitest";
-import { createProgram, getCliVersion } from "../src/cli.js";
+import { createProgram, getCliVersion, parseApprovalPolicy, parseSandboxMode } from "../src/cli.js";
 
 const require = createRequire(import.meta.url);
 const packageJson = require("../package.json") as { version: string };
@@ -29,5 +29,21 @@ describe("cli frozen goals option", () => {
    */
   it("uses package.json version as the CLI version", () => {
     expect(getCliVersion()).toBe(packageJson.version);
+  });
+
+  /**
+   * 业务职责：验证审批策略参数解析器能接受受支持枚举，
+   * 让用户在排障时显式覆盖后台默认审批口径不会被入口层错误拦截。
+   */
+  it("parses supported approval policies", () => {
+    expect(parseApprovalPolicy("never")).toBe("never");
+  });
+
+  /**
+   * 业务职责：验证沙箱模式参数解析器能接受受支持枚举，
+   * 让用户可以为后台执行显式指定文件系统边界。
+   */
+  it("parses supported sandbox modes", () => {
+    expect(parseSandboxMode("workspace-write")).toBe("workspace-write");
   });
 });

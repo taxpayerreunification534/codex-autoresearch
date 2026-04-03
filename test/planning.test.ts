@@ -221,4 +221,31 @@ describe("planning contract", () => {
     expect(resolved.mode).toBe("cli_text");
     expect(resolved.content).toBe("- 显式目标");
   });
+
+  /**
+   * 业务职责：验证单句冻结目标也会被兜底提取成一条 manifest，
+   * 避免用户直接传一句“完成到 58 章才算结束”时完成校验被整体跳过。
+   */
+  it("falls back to a single manifest entry when frozen goals text is plain prose", async () => {
+    const baseDir = await createTempDir();
+    await mkdir(baseDir, { recursive: true });
+    const promptFile = path.join(baseDir, "plan.md");
+    await writeFile(promptFile, "# 计划\n", "utf8");
+
+    const metadata = createMetadata(baseDir, promptFile);
+    await ensurePlanningArtifacts(metadata, undefined, "把待写完成，完成到58章才算结束");
+
+    const passed = await validateCompletionReport(
+      metadata,
+      [
+        "<completion_report>",
+        "- [x] 把待写完成，完成到58章才算结束",
+        "</completion_report>",
+        "cccc-bbbb-aaaa",
+        "CONFIRMED: all tasks completed"
+      ].join("\n")
+    );
+
+    expect(passed.status).toBe("passed");
+  });
 });

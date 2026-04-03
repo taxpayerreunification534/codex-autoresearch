@@ -3,6 +3,7 @@
  * 让 CLI 入口围绕同一套语义边界协作，而不是各自拼装零散参数。
  */
 import type { JobRunResult, ResumeSessionOptions, RunTaskOptions, SessionTailResult, TailSessionOptions } from "../engine/job.js";
+import type { ApprovalPolicy, SandboxMode } from "../engine/policy.js";
 import type { StreamCallbacks } from "../presenters/streaming.js";
 
 /**
@@ -15,6 +16,8 @@ export interface CommandExecutionContext {
   profile?: string;
   codexBin?: string;
   intervalSeconds?: number;
+  approvalPolicy?: ApprovalPolicy;
+  sandboxMode?: SandboxMode;
   fullAuto?: boolean;
   dangerouslyBypass?: boolean;
   skipGitRepoCheck?: boolean;
@@ -88,6 +91,8 @@ export function toRunTaskOptions(command: RunDirectTaskCommand): RunTaskOptions 
     model: command.model,
     profile: command.profile,
     codexBin: command.codexBin,
+    approvalPolicy: command.approvalPolicy,
+    sandboxMode: command.sandboxMode,
     confirmText: command.confirmText,
     resumeTextBase: command.resumeTextBase,
     intervalSeconds: command.intervalSeconds,

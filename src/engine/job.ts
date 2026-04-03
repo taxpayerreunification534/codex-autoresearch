@@ -7,6 +7,7 @@ import path from "node:path";
 import { buildCompletionProtocolText, createCompletionProtocol, isCompletionMessage } from "./completion.js";
 import { discoverSessionId, runCodex } from "./codex.js";
 import { JobError, toJobErrorInfo, type JobErrorInfo } from "./error.js";
+import type { ApprovalPolicy, SandboxMode } from "./policy.js";
 import {
   buildCompletionFailurePrompt,
   buildPlanningPromptAppendix,
@@ -45,6 +46,8 @@ export interface RunTaskOptions {
   jobId?: string;
   model?: string;
   profile?: string;
+  approvalPolicy?: ApprovalPolicy;
+  sandboxMode?: SandboxMode;
   codexBin?: string;
   confirmText?: string;
   resumeTextBase?: string;
@@ -168,6 +171,8 @@ interface NormalizedRunOptions {
   jobId?: string;
   model?: string;
   profile?: string;
+  approvalPolicy?: ApprovalPolicy;
+  sandboxMode?: SandboxMode;
   codexBin: string;
   confirmText: string;
   resumeTextBase: string;
@@ -222,6 +227,8 @@ export function normalizeRunOptions(options: RunTaskOptions): NormalizedRunOptio
     exactStateDir: options.exactStateDir,
     model: options.model,
     profile: options.profile,
+    approvalPolicy: options.approvalPolicy,
+    sandboxMode: options.sandboxMode,
     confirmText: options.confirmText ?? DEFAULT_CONFIRM_TEXT,
     resumeTextBase: options.resumeTextBase ?? DEFAULT_RESUME_TEXT,
     maxAttempts: options.maxAttempts,
@@ -250,6 +257,8 @@ export async function runTask(options: RunTaskOptions): Promise<JobRunResult> {
     protocol,
     model: normalized.model,
     profile: normalized.profile,
+    approvalPolicy: normalized.approvalPolicy,
+    sandboxMode: normalized.sandboxMode,
     fullAuto: normalized.fullAuto,
     dangerouslyBypass: normalized.dangerouslyBypass,
     skipGitRepoCheck: normalized.skipGitRepoCheck,
@@ -579,6 +588,8 @@ async function createFailureMetadata(stateDir: string | undefined, workdir: stri
     protocol: createCompletionProtocol(DEFAULT_CONFIRM_TEXT),
     fullAuto: true,
     dangerouslyBypass: false,
+    approvalPolicy: "never",
+    sandboxMode: "workspace-write",
     skipGitRepoCheck: false,
     startWithResumeIfPossible: false
   });
@@ -605,21 +616,53 @@ async function readEventLog(eventLogFile: string): Promise<string> {
 async function detectBlockingFailureSince(eventLogFile: string, previousContent: string): Promise<JobErrorInfo | undefined> {
   const currentContent = await readEventLog(eventLogFile);
   const newContent = currentContent.startsWith(previousContent) ? currentContent.slice(previousContent.length) : currentContent;
-  const eventLines = newContent
+  return detectBlockingFailureInEventContent(newContent);
+}
+
+/**
+ * 业务职责：把事件日志单行安全解析成对象，避免某一条脏日志导致整轮阻断分析失效。
+ */
+function parseEventLine(line: string): Record<string, unknown> | undefined {
+  try {
+    return JSON.parse(line) as Record<string, unknown>;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * 业务职责：基于单轮新增事件内容判断是否存在真正会阻断收尾的失败，
+ * 把“用户取消了可回退的搜索型 MCP 调用”与“本轮确实失去关键执行能力”区分开来。
+ */
+export function detectBlockingFailureInEventContent(eventContent: string): JobErrorInfo | undefined {
+  const eventLines = eventContent
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter((line) => line.length > 0);
 
-  for (const line of eventLines) {
-    const event = parseEventLine(line);
-    const item = event?.item as
+  const parsedItems = eventLines
+    .map((line) => parseEventLine(line)?.item as
       | {
           type?: string;
           status?: string;
           error?: { message?: string } | null;
+          command?: string;
         }
-      | undefined;
+      | undefined)
+    .filter((item): item is {
+      type?: string;
+      status?: string;
+      error?: { message?: string } | null;
+      command?: string;
+    } => Boolean(item));
 
+  const hasUsefulLocalFallback = parsedItems.some((item) =>
+    item.type === "command_execution" &&
+    item.status === "completed" &&
+    isLocalFallbackCommand(item.command)
+  );
+
+  for (const item of parsedItems) {
     if (item?.type !== "mcp_tool_call" || item.status !== "failed") {
       continue;
     }
@@ -629,14 +672,26 @@ async function detectBlockingFailureSince(eventLogFile: string, previousContent:
       continue;
     }
 
+    let matchedKnownBlockingPattern = false;
     for (const definition of BLOCKING_MCP_TOOL_FAILURE_PATTERNS) {
-      if (definition.pattern.test(errorMessage)) {
-        return {
-          code: definition.code,
-          message: errorMessage,
-          retryable: definition.retryable
-        };
+      if (!definition.pattern.test(errorMessage)) {
+        continue;
       }
+
+      matchedKnownBlockingPattern = true;
+      if (definition.code === "MCP_TOOL_CALL_CANCELLED" && hasUsefulLocalFallback) {
+        break;
+      }
+
+      return {
+        code: definition.code,
+        message: errorMessage,
+        retryable: definition.retryable
+      };
+    }
+
+    if (matchedKnownBlockingPattern) {
+      continue;
     }
 
     return {
@@ -650,12 +705,13 @@ async function detectBlockingFailureSince(eventLogFile: string, previousContent:
 }
 
 /**
- * 业务职责：把事件日志单行安全解析成对象，避免某一条脏日志导致整轮阻断分析失效。
+ * 业务职责：识别本地检索类命令是否已经作为 MCP 取消后的有效回退执行过，
+ * 避免搜索型 MCP 被取消后，明明已成功改走本地检索却仍然阻断整轮完成。
  */
-function parseEventLine(line: string): Record<string, unknown> | undefined {
-  try {
-    return JSON.parse(line) as Record<string, unknown>;
-  } catch {
-    return undefined;
+function isLocalFallbackCommand(command: string | undefined): boolean {
+  if (!command) {
+    return false;
   }
+
+  return /\b(rg|grep|find|sed|ls|cat)\b/u.test(command);
 }

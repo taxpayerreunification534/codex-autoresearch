@@ -13,12 +13,13 @@ import { Command, InvalidArgumentError } from "commander";
 import { once } from "node:events";
 import { normalizeCliExecutionContext } from "./application/context.js";
 import { getTaskStatus, resumeExistingTask, runDirectTask, runTaskFromPromptFile } from "./application/use-cases.js";
+import { APPROVAL_POLICIES, SANDBOX_MODES, type ApprovalPolicy, type SandboxMode } from "./engine/policy.js";
 import { ask } from "./engine/interactive.js";
 import { isFailedPayload, presentFailurePayload, serializeJsonPayload } from "./presenters/json.js";
 import { createStreamingPresenter, type StreamCallbacks } from "./presenters/streaming.js";
 
 const require = createRequire(import.meta.url);
-const packageJson = require("../package.json") as { version: string };
+const packageJson = require("../../package.json") as { version: string };
 
 /**
  * 业务职责：统一暴露 CLI 版本号来源，确保 `--version`、测试校验和后续发布流程都围绕同一份 package 版本工作。
@@ -44,6 +45,8 @@ export function createProgram(): Command {
   program.option("--workdir <path>", "Codex 实际执行目录", process.cwd());
   program.option("--model <model>", "透传给 codex exec -m");
   program.option("--profile <profile>", "透传给 codex exec --profile");
+  program.option("--ask-for-approval <policy>", "透传给 codex exec -a；后台默认使用 never 以避免无人值守时卡在审批", parseApprovalPolicy);
+  program.option("--sandbox <mode>", "透传给 codex exec -s；后台默认使用 workspace-write", parseSandboxMode);
   program.option("--interactive", "启用交互补参");
   program.option("--interval <seconds>", "未完成时的重试间隔秒数", parsePositiveInt, 3);
   program.option("--skip-git-repo-check", "跳过 git 仓库校验");
@@ -216,6 +219,28 @@ export function parsePositiveInt(value: string): number {
   return parsed;
 }
 
+/**
+ * 业务职责：审批策略解析器负责把 CLI 文本参数校验成受支持枚举，
+ * 避免用户把后台审批口径拼错后直到真实执行才发现配置无效。
+ */
+export function parseApprovalPolicy(value: string): ApprovalPolicy {
+  if (!APPROVAL_POLICIES.includes(value as ApprovalPolicy)) {
+    throw new InvalidArgumentError(`Invalid approval policy: ${value}`);
+  }
+  return value as ApprovalPolicy;
+}
+
+/**
+ * 业务职责：沙箱模式解析器负责把 CLI 文本参数校验成受支持枚举，
+ * 让长任务的文件系统执行边界在入口阶段就能被稳定确认。
+ */
+export function parseSandboxMode(value: string): SandboxMode {
+  if (!SANDBOX_MODES.includes(value as SandboxMode)) {
+    throw new InvalidArgumentError(`Invalid sandbox mode: ${value}`);
+  }
+  return value as SandboxMode;
+}
+
 function parseEnvInt(value: string | undefined, fallback: number): number {
   return value ? parsePositiveInt(value) : fallback;
 }
@@ -277,6 +302,8 @@ async function runLegacyTask(task: string, stateDir?: string) {
     stateDir,
     model: process.env.MODEL,
     profile: process.env.PROFILE,
+    approvalPolicy: process.env.APPROVAL_POLICY ? parseApprovalPolicy(process.env.APPROVAL_POLICY) : undefined,
+    sandboxMode: process.env.SANDBOX_MODE ? parseSandboxMode(process.env.SANDBOX_MODE) : undefined,
     intervalSeconds: parseEnvInt(process.env.INTERVAL, 3),
     fullAuto: process.env.USE_FULL_AUTO !== "0",
     dangerouslyBypass: process.env.DANGEROUSLY_BYPASS === "1",

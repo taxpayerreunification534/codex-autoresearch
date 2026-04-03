@@ -8,6 +8,7 @@ import { randomUUID } from "node:crypto";
 import type { CompletionProtocol } from "./completion.js";
 import type { JobErrorInfo } from "./error.js";
 import type { CompletionCheckResult, GoalExtractionMode, PlanDriftInfo } from "./planning.js";
+import type { ApprovalPolicy, SandboxMode } from "./policy.js";
 
 /**
  * 业务职责：任务状态枚举统一表达长任务在守护链路中的生命周期阶段，
@@ -35,6 +36,8 @@ export interface JobMetadata {
   doneToken: string;
   model?: string;
   profile?: string;
+  approvalPolicy?: ApprovalPolicy;
+  sandboxMode?: SandboxMode;
   fullAuto: boolean;
   dangerouslyBypass: boolean;
   skipGitRepoCheck: boolean;
@@ -101,6 +104,8 @@ export async function ensureJobMetadata(
     protocol: CompletionProtocol;
     model?: string;
     profile?: string;
+    approvalPolicy?: ApprovalPolicy;
+    sandboxMode?: SandboxMode;
     fullAuto: boolean;
     dangerouslyBypass: boolean;
     skipGitRepoCheck: boolean;
@@ -133,6 +138,8 @@ export async function ensureJobMetadata(
     doneToken: options.protocol.doneToken,
     model: options.model,
     profile: options.profile,
+    approvalPolicy: options.approvalPolicy,
+    sandboxMode: options.sandboxMode,
     fullAuto: options.fullAuto,
     dangerouslyBypass: options.dangerouslyBypass,
     skipGitRepoCheck: options.skipGitRepoCheck,

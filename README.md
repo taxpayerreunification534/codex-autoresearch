@@ -18,7 +18,7 @@
  |                                      |  buildInitialPrompt:                     |
  |                                      |    任务文本 + 执行边界 + completion protocol |
  |                                      |                                          |
- |                                      |  codex exec --full-auto <prompt>         |
+ |                                      |  codex exec -a never -s workspace-write <prompt> |
  |                                      | ---------------------------------------->|
  |                                      |                                          | 开始执行任务...
  |                                      |                                          | context 用完 / 惰性停止
@@ -178,7 +178,9 @@ cat ./prompt.md | ./codex-keep-running.sh -
 | `INTERVAL` | 重试间隔 |
 | `MODEL` | 模型 |
 | `PROFILE` | profile |
-| `USE_FULL_AUTO` | 是否开启 `--full-auto` |
+| `USE_FULL_AUTO` | 是否启用后台自动执行默认策略；开启时会落成 `-a never -s workspace-write` |
+| `APPROVAL_POLICY` | 显式审批策略，等价于 `--ask-for-approval` |
+| `SANDBOX_MODE` | 显式沙箱模式，等价于 `--sandbox` |
 | `DANGEROUSLY_BYPASS` | 是否启用危险绕过模式 |
 | `SKIP_GIT_REPO_CHECK` | 是否跳过 git 校验 |
 | `START_WITH_RESUME_IF_POSSIBLE` | 是否优先从历史状态恢复 |

@@ -3,6 +3,7 @@
  * 避免 CLI、legacy 和未来新入口分别维护 workdir、interval、full-auto 等默认策略。
  */
 import type { CommandExecutionContext } from "./types.js";
+import type { ApprovalPolicy, SandboxMode } from "../engine/policy.js";
 
 /**
  * 业务职责：CLI 执行选项描述 commander 解析后的根级输入，
@@ -13,6 +14,8 @@ export interface CliExecutionOptions {
   stateDir?: string;
   model?: string;
   profile?: string;
+  approvalPolicy?: ApprovalPolicy;
+  sandboxMode?: SandboxMode;
   interval?: number;
   interactive?: boolean;
   skipGitRepoCheck?: boolean;
@@ -42,6 +45,8 @@ export function normalizeCliExecutionContext(options: CliExecutionOptions): Norm
     stateDir: options.stateDir,
     model: options.model,
     profile: options.profile,
+    approvalPolicy: options.approvalPolicy,
+    sandboxMode: options.sandboxMode,
     intervalSeconds: options.interval ?? 3,
     interactive: options.interactive ?? false,
     skipGitRepoCheck: options.skipGitRepoCheck ?? false,

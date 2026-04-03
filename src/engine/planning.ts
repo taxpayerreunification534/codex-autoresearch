@@ -343,7 +343,8 @@ export function resolveGoalContract(content: string, frozenGoalsText?: string): 
  */
 export function extractGoalManifestEntries(goalContract: string): GoalManifestEntry[] {
   const goalLines = selectBestGoalLines(goalContract);
-  return goalLines.map((goal, index) => ({
+  const fallbackLines = goalLines.length > 0 ? goalLines : [goalContract.trim()].filter((line) => line.length > 0);
+  return fallbackLines.map((goal, index) => ({
     id: `goal_${String(index + 1).padStart(3, "0")}`,
     text: goal,
     normalizedText: normalizeGoalText(goal)

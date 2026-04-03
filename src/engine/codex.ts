@@ -7,6 +7,7 @@ import { appendFile, readFile } from "node:fs/promises";
 import { spawn } from "node:child_process";
 import type { JobMetadata } from "./state.js";
 import { JobError } from "./error.js";
+import type { ApprovalPolicy, SandboxMode } from "./policy.js";
 
 /**
  * 业务职责：Codex 运行选项描述单轮实际下发给 CLI 的 prompt 和模式，
@@ -28,8 +29,14 @@ export function buildCodexArgs(metadata: JobMetadata, options: CodexRunOptions):
   if (metadata.dangerouslyBypass) {
     // 业务约束：显式危险绕过优先级高于 full-auto，避免两个安全模式同时生效造成语义混乱。
     args.push("--dangerously-bypass-approvals-and-sandbox");
-  } else if (metadata.fullAuto) {
-    args.push("--full-auto");
+  } else {
+    const executionPolicy = resolveExecutionPolicy(metadata);
+    if (executionPolicy.approvalPolicy) {
+      args.push("-a", executionPolicy.approvalPolicy);
+    }
+    if (executionPolicy.sandboxMode) {
+      args.push("-s", executionPolicy.sandboxMode);
+    }
   }
 
   if (metadata.skipGitRepoCheck) {
@@ -59,6 +66,28 @@ export function buildCodexArgs(metadata: JobMetadata, options: CodexRunOptions):
 
   args.push(options.prompt);
   return args;
+}
+
+/**
+ * 业务职责：把任务元信息中的自动执行配置归一成显式 CLI 策略，
+ * 避免无人值守任务继续依赖 `--full-auto` 这种会隐含审批语义的快捷别名。
+ */
+function resolveExecutionPolicy(metadata: JobMetadata): { approvalPolicy?: ApprovalPolicy; sandboxMode?: SandboxMode } {
+  if (metadata.approvalPolicy || metadata.sandboxMode) {
+    return {
+      approvalPolicy: metadata.approvalPolicy,
+      sandboxMode: metadata.sandboxMode
+    };
+  }
+
+  if (metadata.fullAuto) {
+    return {
+      approvalPolicy: "never",
+      sandboxMode: "workspace-write"
+    };
+  }
+
+  return {};
 }
 
 /**
